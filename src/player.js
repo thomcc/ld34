@@ -12,8 +12,8 @@ class Player extends Entity {
 		super(game);
 		this.radius = 5.0;
 		this.normalizeAccel = true;
-		this.speed = 50*24;
-		this.drag = 10;
+		this.speed = 50*12;
+		this.drag = 15;
 		this.walking = false;
 		this.animProgress = 0.0;
 	}

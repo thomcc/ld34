@@ -3,18 +3,25 @@
 
 exports.blitFullCanvas = blitFullCanvas;
 function blitFullCanvas(context, canvas) {
-	context.drawImage(canvas, 
+	context.drawImage(canvas,
 		0, 0, canvas.width, canvas.height,
 		0, 0, context.canvas.width, context.canvas.height);
 }
 
 // these are mostly for the debug canvas
 exports.drawLine = drawLine;
-function drawLine(ctx, x0, y0, x1, y1) {
+function drawLine(ctx, x0, y0, x1, y1, {endpoints=false, color=''}={}) {
+	let oldStrokeStyle = ctx.strokeStyle;
+	if (color) ctx.strokeStyle = color;
 	ctx.beginPath();
 	ctx.moveTo(x0, y0);
 	ctx.lineTo(x1, y1);
 	ctx.stroke();
+	if (endpoints) {
+		drawBox(ctx, x0, y0);
+		drawBox(ctx, x1, y1);
+	}
+	if (color) ctx.strokeStyle = oldStrokeStyle;
 }
 
 exports.drawBox = drawBox;

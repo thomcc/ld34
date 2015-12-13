@@ -3,9 +3,12 @@
 const PixelBuffer = require('./pixel_buffer');
 
 class Layer {
-	constructor(name, width, height) {
+	constructor(name, width, height, pbuf=null) {
 		this.name = name;
-		this.buffer = new PixelBuffer(width, height);
+		if (!pbuf) {
+			pbuf = new PixelBuffer(width, height);
+		}
+		this.buffer = pbuf;
 		this.width = this.buffer.width;
 		this.height = this.buffer.height;
 		this.canvas = this.buffer.canvas;
@@ -19,11 +22,11 @@ class Layer {
 	clear() {
 		this.context.clearRect(0, 0, this.width, this.height);
 	}
-	
+
 	fill(color) {
 		this.context.fillStyle = color;
 		this.context.fillRect(0, 0, this.width, this.height);
 	}
-	
+
 }
 module.exports = Layer;

@@ -158,7 +158,7 @@ function changeSaturation(pixel, level, gamma) {
 		g *= g;
 		b *= b;
 	}
-	
+
 	let avg = (1.0 / 3.0) * (r + g + b);
 
 	let dr = r-avg;
@@ -169,7 +169,7 @@ function changeSaturation(pixel, level, gamma) {
 	let rg = avg + level*dg;
 	let rb = avg + level*db;
 
-	if (gamma) { 
+	if (gamma) {
 		rr = Math.sqrt(rr);
 		rg = Math.sqrt(rg);
 		rb = Math.sqrt(rb);
@@ -246,3 +246,15 @@ function raycastTimeLine(rayPos, rayDir, p0, p1, size) {
 // hm...
 exports.Vec2 = require('./vec2');
 
+
+exports.betweenI = betweenI;
+function betweenI(n, lo, hi) { return n >= lo && n <= hi; }
+
+exports.betweenX = exports.between = betweenX;
+function betweenX(n, lo, hi) { return n > lo && n < hi; }
+
+exports.betweenXI = betweenXI;
+function betweenXI(n, lo, hi) { return n > lo && n <= hi; }
+
+exports.betweenIX = betweenIX;
+function betweenIX(n, lo, hi) { return n >= lo && n < hi; }

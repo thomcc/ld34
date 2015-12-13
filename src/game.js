@@ -14,9 +14,13 @@ const Vec2 = require('./vec2');
 const math = require('./math');
 const Input = require('./input');
 const util = require('./util');
+const drawing = require('./drawing');
+const {VisTracker} = require('./lighting');
+
 const {perlinNoise, octaveNoise, UIRand} = require('./rand');
 
 const STATES = { Loading: 0, Menu: 1, Game: 2 };
+
 
 const segmentTmp = [];
 class LD34 {
@@ -46,7 +50,7 @@ class LD34 {
 			this.tileLayer,
 			this.entsLayer,
 			this.fxLayer,
-			// this.lightLayer,
+			this.lightLayer,
 			this.hudLayer,
 			this.overlayLayer,
 		];
@@ -56,7 +60,8 @@ class LD34 {
 		this.height = 1000;
 
 		this.grid = null;
-		
+		this.visTracker = new VisTracker();
+
 		this.player = new Player(this);
 		this.camTarget = new Vec2(0.0, 0.0);
 		this.camera = new Camera(this, this.player, this.camTarget, drawCanv.width, drawCanv.height);
@@ -66,10 +71,9 @@ class LD34 {
 		this.loadProgress = 0;
 		this.assets = {};
 		this.bgbuffer = null;
-		this.loadAssets()
-		.then(() => {
-			this.startLevel(TestLevel);
-		});
+
+		// @@TODO: fix this before shipping!!!
+		this.loadAssets().then(() => { this.startLevel(TestLevel); });
 	}
 
 	loadAssets() {
@@ -144,7 +148,13 @@ class LD34 {
 				this.edgeGeom.push(new LineSegment(new Vec2(px, py), new Vec2(nx, ny)));
 			}
 		});
+		// let count = Math.ceil((this.geomPoints.length+4)*1.5);
+		// let ptXYA = new Float32Array(count*3);
+		// let tmpPoint = new Uint8Array(count)
+		this.visTracker.setSegments(this.edgeGeom);
+
 		this.bgbuffer = new PixelBuffer(this.width, this.height);
+		/*
 		for (let y = 0; y < this.bgbuffer.height; ++y) {
 			for (let x = 0; x < this.bgbuffer.width; ++x) {
 				let bestV = 1.0;
@@ -185,7 +195,7 @@ class LD34 {
 			}
 		}
 
-		this.bgbuffer.update();
+		this.bgbuffer.update();*/
 	}
 
 	addEntity(ent, x=ent.pos.x, y=ent.pos.y) {
@@ -212,11 +222,12 @@ class LD34 {
 	}
 
 	update(dt) {
+		console.time('update');
 		switch (this.state) {
-		case STATES.Game: 
-			this.gameStateUpdate(dt); 
+		case STATES.Game:
+			this.gameStateUpdate(dt);
 			break;
-		case STATES.Loading: 
+		case STATES.Loading:
 			// this is *stupid*
 			if (this.loadProgress === 1.0) {
 				this.state = STATES.Game;
@@ -224,11 +235,12 @@ class LD34 {
 				this.loadProgress = 1.0;
 			}
 			break;
-		case STATES.Menu: 
+		case STATES.Menu:
 			break; // NYI
 		}
+		console.timeEnd('update');
 	}
-	
+
 	gameStateUpdate(dt) {
 		this.debugContext.clearRect(0, 0, this.debugContext.canvas.width, this.debugContext.canvas.height);
 		this.debugContext.save();
@@ -244,16 +256,16 @@ class LD34 {
 			mdx /= 4;
 			mdy /= 4;
 			if (mdx < 20 && mdy < 20) {
-				this.camTarget.copy(this.player.pos)
+				// this.camTarget.copy(this.player.pos)
 			}
 			else {
-				this.camTarget.set(this.player.pos.x+mdx, this.player.pos.y+mdy);
+				// this.camTarget.set(this.player.pos.x+mdx, this.player.pos.y+mdy);
 			}
 		}
 		else {
 			this.camTarget.copy(this.player.pos);
 		}
-		
+
 
 		// console.time('update:entities');
 		{
@@ -280,8 +292,33 @@ class LD34 {
 			}
 			effects.length = j;
 		}
+		if (this.player.lastPos.distance(this.player.pos) >= 1) {
+			this.visTracker.setCenter(this.player.pos);
+			this.visTracker.sweep();
+		}
+
+		// this.visSegments = vishull2d(this.vishullInput, [this.player.x, this.player.y]);
 
 		this.camera.update(dt);
+		console.time('lighting');
+		//this.computeLighting();
+		let {minX, minY, maxX, maxY} = this.camera;
+		let p0 = Vec2.temp(minX-1, minY-1);
+		let p1 = Vec2.temp(minX-1, maxY+1);
+		let p2 = Vec2.temp(maxX+1, maxY+1);
+		let p3 = Vec2.temp(maxX+1, minY-1);
+
+		// @TODO: avoid copying this so frequently
+		this.visTracker.setSegments(this.edgeGeom.concat([
+			new LineSegment(p0, p1, LineSegment.Flags.DoubleSided),
+			new LineSegment(p1, p2, LineSegment.Flags.DoubleSided),
+			new LineSegment(p2, p3, LineSegment.Flags.DoubleSided),
+			new LineSegment(p3, p0, LineSegment.Flags.DoubleSided)
+		]));
+
+		this.visTracker.setCenter(this.player.pos);
+		this.visTracker.sweep();
+		console.timeEnd('lighting');
 
 		// console.timeEnd('update:effects');
 		this.debugContext.restore();
@@ -332,7 +369,7 @@ class LD34 {
 		return curBest;
 	}
 
-	raycast(outP, outN, rayPos, rayDir, rayLen) {
+	raycast(outP, outN, rayPos, rayDir, rayLen, extraSegs) {
 		let {x:rayX, y:rayY} = rayPos;
 		let {x:rayDirX, y:rayDirY} = rayDir;
 		let gx = Math.floor(rayX / Consts.TileSize);
@@ -371,12 +408,38 @@ class LD34 {
 			return -1;
 		}
 
-		let rayMaxDist = rayLen || 2000.0;
+		let rayMaxDist = rayLen || 10000.0;
 		let tmpRayP = Vec2.temp(rayX, rayY);
 		let tmpRayV = Vec2.temp(rayDirX*rayMaxDist, rayDirY*rayMaxDist);
+
+		let esBestT = 2;
+		let esBestN = Vec2.temp();
+		let esBestP = Vec2.temp();
+		if (extraSegs != null) {
+			let segTmpP = Vec2.temp();
+			let segTmpN = Vec2.temp();
+			for (let si = 0; si < extraSegs.length; ++si) {
+				let t = extraSegs[si].raycast(segTmpP, segTmpN, tmpRayP, tmpRayV, 0);
+				if (math.betweenI(t, 0.0, 1.0) && t < esBestT) {
+					esBestT = t;
+					esBestN.copy(segTmpN);
+					esBestP.copy(segTmpP);
+				}
+			}
+		}
+
 		let travel = -1;
-		while ((travel = this.RaycastCell(outP, outN, gx, gy, tmpRayP, tmpRayV)) !== -1) {
-			if (travel !== 2) { return travel * rayMaxDist; }
+		while ((travel = this.raycastCell(outP, outN, gx, gy, tmpRayP, tmpRayV)) !== -1) {
+
+			if (travel !== 2) {
+				if (esBestT >= 0 && esBestT !== 2) {
+					travel = Math.min(esBestT, travel);
+					outP.copy(esBestP);
+					outN.copy(esBestN);
+				}
+				return travel * rayMaxDist;
+			}
+
 
 			if (sx < sy) {
 				sx += ex;
@@ -400,11 +463,13 @@ class LD34 {
 	}
 
 	render() {
+		console.time('render');
 		switch (this.state) {
 			case STATES.Game: this.gameStateRender(); break;
 			case STATES.Loading: this.renderLoading(); break;
 			case STATES.Menu: break; // NYI
 		}
+		console.timeEnd('render');
 	}
 
 	renderLoading() {
@@ -446,8 +511,11 @@ class LD34 {
 		}
 
 		let {minX, minY, maxX, maxY} = this.camera;
-		minX = Math.floor(minX);
-		minY = Math.floor(minY);
+		// minX = Math.floor(minX);
+		// minY = Math.floor(minY);
+		let iMinX = Math.round(minX);
+		let iMinY = Math.round(minY);
+
 		this.debugContext.save();
 		this.debugContext.scale(Consts.Scale, Consts.Scale);
 		this.debugContext.lineWidth = 1 / Consts.Scale;
@@ -466,6 +534,7 @@ class LD34 {
 		this.bgmodLayer.blendMode = 'overlay';
 		this.bgmodLayer.alpha = 0.2;
 		{
+			console.time('render tiles');
 			let tileCtx = this.tileLayer.context;
 			tileCtx.fillStyle = 'red';
 			for (let ty = minTileY; ty <= maxTileY; ++ty) {
@@ -473,9 +542,9 @@ class LD34 {
 				for (let tx = minTileX; tx <= maxTileX; ++tx) {
 					let tile = this.tiles[tx + row];
 					if (tile.id === 0) continue;
-					// --TileID;
-					var tileX = tile.id % 16
-					var tileY = (tile.id / 16)|0;
+					let tileId = tile.id-1;
+					var tileX = tileId % 16
+					var tileY = (tileId / 16)|0;
 					tileX *= 16;
 					tileY *= 16;
 
@@ -484,46 +553,80 @@ class LD34 {
 						Math.round(tx * Consts.TileSize - minX),
 						Math.round(ty * Consts.TileSize - minY),
 						Consts.TileSize, Consts.TileSize);
-
-					/*
-					if (tile.id === 1) {
-						let sx = tx;
-						let xi = sx+1;
-						while (xi < this.tileWidth && this.tiles[xi+row].id === 1) ++xi;
-						--xi;
-						tileCtx.fillRect(Math.round(tx*Consts.TileSize-minX),
-						                 Math.round(ty*Consts.TileSize-minY),
-						                 (xi - sx + 1) * Consts.TileSize,
-						                 Consts.TileSize);
-						tx = xi;
-					} else {
-
-						tileCtx.beginPath();
-						tileCtx.moveTo(Math.round(tile.edges[0].start.x-minX), Math.round(tile.edges[0].start.y-minY));
-						for (let ei = 0, el = tile.edges.length; ei < el; ++ei) {
-							tileCtx.lineTo(Math.round(tile.edges[ei].end.x-minX), Math.round(tile.edges[ei].end.y-minY));
-						}
-						tileCtx.fill();
-					}*/
 				}
 			}
+			console.timeEnd('render tiles');
 		}
 
+		// console.time('render entities');
 		for (let ei = 0; ei < this.entities.length; ++ei) {
 			let ent = this.entities[ei];
 			if (ent.enabled) {
 				ent.render(minX, minY, this.entsLayer);
 			}
 		}
+		// console.timeEnd('render entities');
 
+		// console.time('render effects');
 		for (let ei = 0; ei < this.effects.length; ++ei) {
 			let fx = this.effects[ei];
 			if (fx.enabled) {
 				fx.render(minX, minY, this.fxLayer);
 			}
 		}
+		// console.timeEnd('render effects');
 
-		if (true) this.edgeGeom.forEach(seg => seg.debugRender(this.debugContext));
+
+		if (this.visTracker.outXs.length)
+		{
+			console.time('render lighting');
+			this.lightLayer.clear();
+			this.lightLayer.fill('black');
+
+			this.lightLayer.alpha = 1.0;
+			this.lightLayer.blendMode = 'multiply';
+			let lctx = this.lightLayer.context;
+			lctx.save();
+			lctx.translate(-iMinX, -iMinY);
+			lctx.beginPath();
+			/*
+			let lightPolygon = this.lightPolygon;
+			lctx.moveTo(lightPolygon[0].ex, lightPolygon[0].ey);
+			for (let i = 1, l = lightPolygon.length; i < l; ++i) {
+				lctx.lineTo(lightPolygon[i].ex, lightPolygon[i].ey);
+			}
+			lctx.lineTo(lightPolygon[0].ex, lightPolygon[0].ey);
+			*/
+			let {outXs, outYs} = this.visTracker;
+			lctx.moveTo(outXs[0], outYs[0]);
+			for (let i = 1, l = outXs.length; i < l; ++i) {
+				lctx.lineTo(outXs[i], outYs[i]);
+				drawing.drawArrow(this.debugContext, this.player.pos.x, this.player.pos.y, outXs[i], outYs[i]);
+			}
+			lctx.lineTo(outXs[0], outYs[0]);
+
+
+			lctx.closePath();
+			lctx.fillStyle = 'white';
+			lctx.fill();
+			lctx.restore();
+
+			console.timeEnd('render lighting');
+		}
+		let DRAW_DEBUG_GEOM = false;
+
+		if (DRAW_DEBUG_GEOM) {
+			this.debugContext.strokeStyle = 'black';
+			this.edgeGeom.forEach(seg =>
+				seg.debugRender(this.debugContext));
+			this.debugContext.strokeStyle = 'yellow';
+			// this.lightPolygon.forEach(({sx, sy, ex, ey}) => {
+			// 	drawing.drawArrow(this.debugContext, this.player.pos.x, this.player.pos.y, ex, ey)
+			// })
+
+		}
+
+
 		this.debugContext.restore();
 	}
 }

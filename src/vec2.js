@@ -2,9 +2,9 @@
 const {ASSERT} = require('./debug');
 class Vec2 {
 	constructor(x, y) { this.x = +x||0.0; this.y = +y||0.0; }
-	perp() { return new Vec2(-this.y, this.x).nanCheck(); }
-	to(o) { return new Vec2(o.x-this.x, o.y-this.y).nanCheck(); }
-	dot(o) { return this.nanCheck().x*o.x+this.y*o.y; }
+	perp() { return new Vec2(-this.y, this.x); }
+	to(o) { return new Vec2(o.x-this.x, o.y-this.y); }
+	dot(o) { return this.x*o.x+this.y*o.y; }
 
 	perpDot(o) { return -this.y*o.x+this.x*o.y; }
 	plus(o) { return new Vec2(this.x+o.x, this.y+o.y); }
@@ -14,14 +14,14 @@ class Vec2 {
 	len() { return Math.sqrt(this.x*this.x + this.y*this.y); }
 	length() { return this.len(); }
 	scaled(n) { return new Vec2(this.x*n, this.y*n); }
-	normalize() { this.normalizeGetLen(); return this.nanCheck(); }
-	clone() { return new Vec2(this.x, this.y).nanCheck(); }
-	copy({x, y}) { this.x = x; ; this.y = y; return this.nanCheck(); }
+	normalize() { this.normalizeGetLen(); return this; }
+	clone() { return new Vec2(this.x, this.y); }
+	copy({x, y}) { this.x = x; ; this.y = y; return this; }
 
-	scale(n) { this.x *= n; this.y *= n; return this.nanCheck(); }
-	set(x, y) { this.x = x; this.y = y; return this.nanCheck(); }
+	scale(n) { this.x *= n; this.y *= n; return this; }
+	set(x, y) { this.x = x; this.y = y; return this; }
 	clear() { return this.set(0.0, 0.0); }
-	add(o) { this.x += o.x; this.y += o.y; return this.nanCheck(); }
+	add(o) { this.x += o.x; this.y += o.y; return this; }
 
 	addScaled(o, n) { this.x += o.x*n; this.y += o.y*n; return this; }
 
@@ -36,7 +36,7 @@ class Vec2 {
 	}
 
 	distanceSq(o) {
-		this.nanCheck()
+		this
 		let dx = this.x - o.x, dy = this.y - o.y;
 		return dx*dx + dy*dy;
 	}
@@ -47,7 +47,7 @@ class Vec2 {
 		let il = 1.0/Math.sqrt(l2);
 		this.x *= il;
 		this.y *= il;
-		this.nanCheck()
+		this
 		return l2*il;
 	}
 
@@ -55,8 +55,8 @@ class Vec2 {
 		return this.scale(1.0/(Math.sqrt(this.x*this.x+this.y*this.y)+1e-37));
 	}
 
-	xFlip(about=0.0) { this.x = 2.0 * about - this.x; return this.nanCheck(); }
-	yFlip(about=0.0) { this.y = 2.0 * about - this.y; return this.nanCheck(); }
+	xFlip(about=0.0) { this.x = 2.0 * about - this.x; return this; }
+	yFlip(about=0.0) { this.y = 2.0 * about - this.y; return this; }
 
 	rotate90(about) {
 		let aboutX = 0.0, aboutY = 0.0;
@@ -65,7 +65,7 @@ class Vec2 {
 		let y = this.y - aboutY;
 		this.x = -y+aboutX;
 		this.y =  x+aboutY;
-		return this.nanCheck();
+		return this;
 	};
 
 	rotate180(about) {
@@ -75,7 +75,7 @@ class Vec2 {
 		let y = this.y - aboutY;
 		this.x = -x+aboutX;
 		this.y = -y+aboutY;
-		return this.nanCheck();
+		return this;
 	};
 
 	rotate270(about) {
@@ -85,7 +85,7 @@ class Vec2 {
 		let y = this.y - aboutY;
 		this.x =  y+aboutX;
 		this.y = -x+aboutY;
-		return this.nanCheck();
+		return this;
 	};
 
 	rotate(angle, about) {
@@ -100,15 +100,15 @@ class Vec2 {
 		let ny = (sin * x) + (cos * y);
 		this.x = nx + aboutX;
 		this.y = ny + aboutY;
-		return this.nanCheck();
+		return this;
 	}
 
-	rotated90(about) { return this.clone().rotate90(about).nanCheck(); }
-	rotated180(about) { return this.clone().rotate180(about).nanCheck(); }
-	rotated270(about) { return this.clone().rotate270(about).nanCheck(); }
+	rotated90(about) { return this.clone().rotate90(about); }
+	rotated180(about) { return this.clone().rotate180(about); }
+	rotated270(about) { return this.clone().rotate270(about); }
 
-	xFlipped(aboutX) { return this.clone().xFlip(aboutX).nanCheck(); }
-	yFlipped(aboutY) { return this.clone().yFlip(aboutY).nanCheck(); }
+	xFlipped(aboutX) { return this.clone().xFlip(aboutX); }
+	yFlipped(aboutY) { return this.clone().yFlip(aboutY); }
 
 
 	nanCheck() {
@@ -129,7 +129,7 @@ Vec2.Pool = {
 	items: [],
 	count: 0,
 	get(x, y) {
-		if (this.count === this.items.length) 
+		if (this.count === this.items.length)
 			this.items.push(new Vec2(0.0, 0.0));
 		return this.items[this.count++].set(+x||0.0, +y||0.0);
 	},

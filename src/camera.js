@@ -4,44 +4,8 @@ const Vec2 = require('./vec2');
 const Clock = require('./clock');
 const {UIRand} = require('./rand');
 const {ASSERT} = require('./debug');
-
-function smoothDampV2(out, pos, target, vel, smoothing, maxSpeed, dt) {
-	smoothing = Math.max(0.0001, smoothing);
-	let n = 2.0 / smoothing;
-	let step = n * dt;
-	let curve = 1.0 / (1.0 + step + 0.48*step*step + 0.235*step*step*step);
-	let distX = pos.x-target.x, distY = pos.y-target.y;
-	let maxLength = maxSpeed*smoothing;
-
-	if (distX*distX + distY*distY > maxLength*maxLength) {
-		let invDl = math.safeInverseLength(distX, distY);
-		distX *= invDl;
-		distY *= invDl;
-	}
-	let targetX = pos.x - distX;
-	let targetY = pos.y - distY;
-
-	let changeX = (vel.x + n*distX)*dt;
-	let changeY = (vel.y + n*distY)*dt;
-
-	vel.x = (vel.x - n*changeX)*curve;
-	vel.y = (vel.y - n*changeY)*curve;
-	vel.nanCheck()
-	
-	let resultX = targetX + (distX + changeX) * curve;
-	let resultY = targetY + (distY + changeY) * curve;
-
-	if ((target.x-pos.x)*(resultX - target.x) + (target.y-pos.y)*(resultY - target.y) > 0.0) {
-		resultX = target.x;
-		resultY = target.y;
-		vel.x = 0.0;
-		vel.y = 0.0;
-	}
-	out.x = resultX;
-	out.y = resultY;
-	out.nanCheck()
-	return out;
-}
+const Input = require('./input');
+const Consts = require('./constants');
 
 class Camera {
 	constructor(game, focus, target, width, height) {
@@ -54,13 +18,16 @@ class Camera {
 		this.goal = new Vec2(0.0, 0.0);
 		this.unclampedPos = new Vec2(0.0, 0.0);
 		this.pos = new Vec2(0.0, 0.0);
-		this.vel = new Vec2(0.0, 0.0);
-		this.maxSpeed = Number.MAX_VALUE;
-		this.smoothing = 0.3;
+		// this.vel = new Vec2(0.0, 0.0);
+		// this.maxSpeed = Number.MAX_VALUE;
+		// this.smoothing = 0.3;
 		this.jitterLevel = 0;
 		this.shake = new Vec2(0.0, 0.0);
 		this.shakeDrag = 0.2;
 		this.driftMul = new Vec2(0.1, 0.2);
+
+		this.lookahead = 1.2;
+		this.speed = 2;
 
 		this.minX = 0;
 		this.maxX = width;
@@ -73,7 +40,7 @@ class Camera {
 
 	setPosition(nx, ny, reset) {
 		if (reset) {
-			this.vel.set(0, 0);
+			// this.vel.set(0, 0);
 			this.goal.set(nx, ny);
 			this.shake.set(0, 0);
 		}
@@ -119,13 +86,67 @@ class Camera {
 		ASSERT(+this.maxX === this.maxX);
 		ASSERT(+this.maxY === this.maxY);
 		this.pos.nanCheck();
-		this.vel.nanCheck();
+		// this.vel.nanCheck();
 		this.goal.nanCheck();
 		this.target.nanCheck();
 	}
 
-	
+
 	update(dt) {
+		let cx = this.pos.x;
+		let cy = this.pos.y;
+		let fx = this.focus.pos.x;
+		let fy = this.focus.pos.y;
+
+		if (Math.abs(fx - cx) < 100/Consts.SCALE) {
+			fx = cx;
+		}
+		if (Math.abs(fy - cy) < 100/Consts.SCALE) {
+			fy = cy;
+		}
+
+		let fvx = this.focus.vel.x * 0;
+		let fvy = this.focus.vel.y * 0;
+
+		let gx = fx + fvx * this.lookahead;
+		let gy = fy + fvy * this.lookahead;
+		let aiming = false;
+		let aimDiv = 1;
+
+		if (Input.mouse.isDown) {
+			// aiming = true;
+			aimDiv = 4;
+		}
+
+		if (Input.keyboard.isDown('space')) {
+			// aiming = true;
+			aimDiv = 2;
+		}
+
+		if (aiming) {
+			let mwx = this.game.mouse.x;
+			let mwy = this.game.mouse.y;
+
+			let frx = mwx - this.focus.pos.x;
+			let fry = mwy - this.focus.pos.y;
+			gx += frx / aimDiv;
+			gy += fry / aimDiv;
+		}
+
+		gx = math.clamp(gx, this.width/2, this.xBound()-this.width/2);
+		gy = math.clamp(gy, this.height/2, this.yBound()-this.height/2);
+
+		var nx = gx - cx;
+		var ny = gy - cy;
+
+		var relax = 1.0 - Math.exp(-this.speed*dt);
+
+		nx = this.pos.x + nx*relax;
+		ny = this.pos.y + ny*relax;
+
+		this.setPosition(nx, ny);
+
+		/*
 		smoothDampV2(this.goal, this.goal, this.target, this.vel, this.smoothing, this.maxSpeed, dt);
 		let driftX = Math.cos(Clock.accumTime*this.driftMul.x) * 5 * this.jitterLevel
 		let driftY = Math.cos(Clock.accumTime*this.driftMul.y) * 5 * this.jitterLevel
@@ -135,11 +156,11 @@ class Camera {
 
 		this.shake.x -= this.shakeDrag*this.shake.x*dt;
 		this.shake.y -= this.shakeDrag*this.shake.y*dt;
-		
-		this.setPosition(this.unclampedPos.x, this.unclampedPos.y);
+
+		this.setPosition(this.unclampedPos.x, this.unclampedPos.y);*/
 	}
-	
-	
+
+
 }
 
 module.exports = Camera;
