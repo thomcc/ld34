@@ -16,10 +16,12 @@ const Input = require('./input');
 const util = require('./util');
 const drawing = require('./drawing');
 const {VisTracker} = require('./lighting');
+const Sounds = require('./audio');
 
 const {perlinNoise, octaveNoise, UIRand} = require('./rand');
 
 const STATES = { Loading: 0, Menu: 1, Game: 2 };
+
 
 function loadLevel(tmx) {
 	let mapElem = tmx.querySelector('map');
@@ -80,6 +82,8 @@ class LD34 {
 		this.hudLayer = new Layer('hud', drawCanv.width, drawCanv.height);
 		this.overlayLayer = new Layer('overlay', drawCanv.width, drawCanv.height);
 
+		this.startedGame = false;
+
 		this.layers = [
 			this.bgLayer,
 			//this.bgmodLayer,
@@ -111,8 +115,8 @@ class LD34 {
 		this.bgbuffer = null;
 		this.lightMaskCanvas = util.createCanvas(drawCanv.width, drawCanv.height);
 		this.lightMaskCtx = this.lightMaskCanvas.getContext('2d');
-		// @@TODO: fix this before shipping!!!
-		this.loadAssets().then(() => { this.startLevel(this.assets.level0); });
+
+		this.loadAssets();
 	}
 
 	loadAssets() {
@@ -141,10 +145,10 @@ class LD34 {
 				return stuff;
 			});
 		})).then(() => {
-			console.time("getRotatedTiles");
+			if (window.TIME_FUNCTIONS) console.time("getRotatedTiles");
 			this.assets.playerRotations = PixelBuffer.getRotatedTiles(this.assets.player, 16);
-			console.timeEnd('getRotatedTiles');
-			this.loadProgress = 0.91;
+			if (window.TIME_FUNCTIONS) console.timeEnd('getRotatedTiles');
+			this.setState(STATES.Game);
 		}).catch(e => {
 			console.error(e);
 			this.loadingFailed = true;
@@ -152,6 +156,7 @@ class LD34 {
 	}
 
 	startLevel(level) {
+		this.startedGame = true;
 		this.entities.length = 0;
 		this.effects.length = 0;
 		this.width = level.width*Consts.TileSize;
@@ -210,52 +215,12 @@ class LD34 {
 		// let tmpPoint = new Uint8Array(count)
 		this.visTracker.setSegments(this.edgeGeom);
 		this.bgbuffer = new PixelBuffer(this.width, this.height);
-		this.seenBuffer = new PixelBuffer(this.width, this.height);
-		this.seenBuffer.context.fillStyle = 'black'
-		this.seenBuffer.context.fillRect(0, 0, this.width, this.height);
+		// this.seenBuffer = new PixelBuffer(this.width, this.height);
+		// this.seenBuffer.context.fillStyle = 'black'
+		// this.seenBuffer.context.fillRect(0, 0, this.width, this.height);
 
-		/*
-		for (let y = 0; y < this.bgbuffer.height; ++y) {
-			for (let x = 0; x < this.bgbuffer.width; ++x) {
-				let bestV = 1.0;
-				for (let iter = 0; iter < 3; ++iter) {
-					let v0 = (octaveNoise(x/100, y/100, iter*5+10)+1)/2;
-					let v1 = (octaveNoise(x/100, y/100, iter*5+20)+1)/2;
-					let v = Math.abs(v0-v1);
-					const steps = 15;
-					v = Math.sqrt(v);
-					v = Math.floor(v*steps);
-					// if (v < 6) v = 0;
-					v /= steps;
-					if (v > 0.04) {
-						v = 0.5;
-					}
-					if (v < bestV) bestV = v;
-				}
+		Sounds.playMusic(1);
 
-				let color = (Math.floor(math.saturate(bestV) * 255) * 0x010101) | 0xff000000;
-				this.bgbuffer.putPixel(x, y, color);
-			}
-		}
-		for (let y = 0; y < this.bgbuffer.height-1; ++y) {
-			for (let x = 0; x < this.bgbuffer.width; ++x) {
-				if ((this.bgbuffer.getPixel(x, y) & 0xff) < 0x70) {
-					if (y !== 0) {
-						let pprev = this.bgbuffer.getPixel(x, y-1) & 0xff;
-						if (pprev < 0x70) {
-							this.bgbuffer.putPixel(x, y, 0xff000000|(UIRand.betweenI(pprev, 0x7f)*0x10101))
-						}
-					}
-					continue;
-				}
-				let pix = this.bgbuffer.getPixel(x, y+1);
-				if ((pix & 0xff) < 0x70) {
-					this.bgbuffer.putPixel(x, y, 0xffcccccc);
-				}
-			}
-		}
-
-		this.bgbuffer.update();*/
 	}
 
 	addEntity(ent, x=ent.pos.x, y=ent.pos.y) {
@@ -282,9 +247,12 @@ class LD34 {
 	}
 
 	update(dt) {
-		console.time('update');
+		if (window.TIME_FUNCTIONS) console.time('update');
 		switch (this.state) {
 		case STATES.Game:
+			if (!this.startedGame) {
+				this.startLevel(this.assets.level0);
+			}
 			this.gameStateUpdate(dt);
 			break;
 		case STATES.Loading:
@@ -298,7 +266,7 @@ class LD34 {
 		case STATES.Menu:
 			break; // NYI
 		}
-		console.timeEnd('update');
+		if (window.TIME_FUNCTIONS) console.timeEnd('update');
 	}
 
 	gameStateUpdate(dt) {
@@ -327,7 +295,7 @@ class LD34 {
 		}
 
 
-		// console.time('update:entities');
+		// if (window.TIME_FUNCTIONS) console.time('update:entities');
 		{
 			let entities = this.entities;
 			for (let i = 0; i < entities.length; ++i) {
@@ -339,8 +307,8 @@ class LD34 {
 			}
 			entities.length = j;
 		}
-		// console.timeEnd('update:entities');
-		// console.time('update:effects');
+		// if (window.TIME_FUNCTIONS) console.timeEnd('update:entities');
+		// if (window.TIME_FUNCTIONS) console.time('update:effects');
 		{
 			let effects = this.effects;
 			for (let i = 0; i < effects.length; ++i) {
@@ -355,7 +323,7 @@ class LD34 {
 		// this.visSegments = vishull2d(this.vishullInput, [this.player.x, this.player.y]);
 
 		this.camera.update(dt);
-		console.time('lighting');
+		if (window.TIME_FUNCTIONS) console.time('lighting');
 		//this.computeLighting();
 		let {minX, minY, maxX, maxY} = this.camera;
 		let p0 = Vec2.temp(minX-1, minY-1);
@@ -391,9 +359,9 @@ class LD34 {
 
 		this.visTracker.setCenter(this.player.pos);
 		this.visTracker.sweep();
-		console.timeEnd('lighting');
+		if (window.TIME_FUNCTIONS) console.timeEnd('lighting');
 
-		// console.timeEnd('update:effects');
+		// if (window.TIME_FUNCTIONS) console.timeEnd('update:effects');
 		this.debugContext.restore();
 	}
 
@@ -440,6 +408,11 @@ class LD34 {
 			}
 		}
 		return curBest;
+	}
+
+	setState(state) {
+		this.lastState = this.state;
+		this.state = state;
 	}
 
 	raycast(outP, outN, rayPos, rayDir, rayLen, extraSegs) {
@@ -536,13 +509,14 @@ class LD34 {
 	}
 
 	render() {
-		console.time('render');
-		switch (this.state) {
+		if (window.TIME_FUNCTIONS) console.time('render');
+		switch (this.lastState) {
 			case STATES.Game: this.gameStateRender(); break;
 			case STATES.Loading: this.renderLoading(); break;
 			case STATES.Menu: break; // NYI
 		}
-		console.timeEnd('render');
+		if (window.TIME_FUNCTIONS) console.timeEnd('render');
+		this.lastState = this.state; // @@HACK: we don't want to render until we've updated with our new state at least once.
 	}
 
 	renderLoading() {
@@ -607,7 +581,7 @@ class LD34 {
 		// this.bgmodLayer.blendMode = 'overlay';
 		// this.bgmodLayer.alpha = 0.2;
 		{
-			console.time('render tiles');
+			if (window.TIME_FUNCTIONS) console.time('render tiles');
 			let tileCtx = this.tileLayer.context;
 			tileCtx.fillStyle = 'red';
 			for (let ty = minTileY; ty <= maxTileY; ++ty) {
@@ -628,30 +602,30 @@ class LD34 {
 						Consts.TileSize, Consts.TileSize);
 				}
 			}
-			console.timeEnd('render tiles');
+			if (window.TIME_FUNCTIONS) console.timeEnd('render tiles');
 		}
 
-		// console.time('render entities');
+		// if (window.TIME_FUNCTIONS) console.time('render entities');
 		for (let ei = 0; ei < this.entities.length; ++ei) {
 			let ent = this.entities[ei];
 			if (ent.enabled) {
 				ent.render(0, 0, this.entsLayer);
 			}
 		}
-		// console.timeEnd('render entities');
+		// if (window.TIME_FUNCTIONS) console.timeEnd('render entities');
 
-		// console.time('render effects');
+		// if (window.TIME_FUNCTIONS) console.time('render effects');
 		for (let ei = 0; ei < this.effects.length; ++ei) {
 			let fx = this.effects[ei];
 			if (fx.enabled) {
 				fx.render(0, 0, this.fxLayer);
 			}
 		}
-		// console.timeEnd('render effects');
+		// if (window.TIME_FUNCTIONS) console.timeEnd('render effects');
 
 
 		if (this.visTracker.outXs.length) {
-			console.time('render lighting');
+			if (window.TIME_FUNCTIONS) console.time('render lighting');
 			this.lightLayer.clear();
 
 			this.lightLayer.alpha = 0.1;
@@ -715,7 +689,7 @@ class LD34 {
 			lctx.fillRect(0, 0, lctx.canvas.width, lctx.canvas.height);
 			lctx.drawImage(maskCtx.canvas, 0, 0);
 			// this.seenBuffer.context.drawImage(maskCtx.canvas, iMinX, iMinY);
-			console.timeEnd('render lighting');
+			if (window.TIME_FUNCTIONS) console.timeEnd('render lighting');
 		}
 
 		// this.bgLayer.fill('rgb(55, 55, 55)');
