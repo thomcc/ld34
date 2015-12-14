@@ -68,6 +68,12 @@ function lineIntersection(p1x, p1y, p2x, p2y, p3x, p3y, p4x, p4y) {
     return Vec2.temp(p1x + s * (p2x - p1x), p1y + s * (p2y - p1y));
 }
 
+function pointSorter(a, b) {
+	let aAngle = +a.angle, bAngle = +b.angle;
+	if (aAngle !== bAngle) return aAngle - bAngle;
+	else return (!a.begin && b.begin) ? -1 : (a.begin && !b.begin ? 1 : 0);
+}
+
 class SegList {
 	constructor() {
 		this.head = null;
@@ -205,9 +211,9 @@ class VisTracker {
 		// this.open.clear();
 		// this.outXs.length = 0;
 		// this.outYs.length = 0;
-		segs.forEach(({start, end}) => {
-			this.addSegment(start, end);
-		});
+		for (let i = 0; i < segs.length; ++i) {
+			this.addSegment(segs[i].start, segs[i].end);
+		}
 	}
 
 	addSegment(start, end) {
@@ -238,15 +244,9 @@ class VisTracker {
 		++currentListGen;
 		this.outXs.length = 0;
 		this.outYs.length = 0;
-		this.points.sort((a, b) => {
-			if (a.angle > b.angle) return 1;
-			if (a.angle < b.angle) return -1;
-			if (!a.begin && b.begin) return 1;
-			if (a.begin && !b.begin) return -1;
-			return 0;
-		});
+		this.points.sort(pointSorter);
 		this.open.clear();
-		let beginAngle = 0.0;
+		let beginAngle = 0;
 		for (let pass = 0; pass < 2; ++pass) {
 			for (let ep = 0, epl = this.points.length; ep < epl; ++ep) {
 				let p = this.points[ep];
@@ -291,7 +291,6 @@ class VisTracker {
 			p4y = +segment.end.y;
 		}
 		else {
-			debugger;
 			p3x = centerX + Math.cos(a1)*10000;
 			p3y = centerY + Math.sin(a1)*10000;
 			p4x = centerX + Math.cos(a2)*10000;

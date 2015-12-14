@@ -12,8 +12,8 @@ class Player extends Entity {
 		super(game);
 		this.radius = 5.0;
 		this.normalizeAccel = true;
-		this.speed = 50*12;
-		this.drag = 15;
+		this.speed = 20*20;
+		this.drag = 5;
 		this.walking = false;
 		this.animProgress = 0.0;
 	}
@@ -45,8 +45,8 @@ class Player extends Entity {
 		layer.context.strokeStyle = 'green';
 		layer.context.drawImage(this.game.assets.playerRotations.canvas,
 			16*anim, 16*rotation, 16, 16,
-			Math.round(this.pos.x-mx-8),
-			Math.round(this.pos.y-my-8),
+			this.pos.x-mx-8,
+			this.pos.y-my-8,
 			16, 16);
 		drawing.drawCircle(this.game.debugContext, this.pos.x, this.pos.y, this.radius);
 		//(layer.context, this.pos.x-mx, this.pos.y-my, this.radius);

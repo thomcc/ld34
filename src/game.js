@@ -44,13 +44,13 @@ class LD34 {
 		this.overlayLayer = new Layer('overlay', drawCanv.width, drawCanv.height);
 
 		this.layers = [
-			this.bgLayer,
-			this.bgmodLayer,
+			// this.bgLayer,
+			//this.bgmodLayer,
 			// this.bgmodLayer,
-			this.tileLayer,
 			this.entsLayer,
-			this.fxLayer,
+			// this.fxLayer,
 			this.lightLayer,
+			this.tileLayer,
 			this.hudLayer,
 			this.overlayLayer,
 		];
@@ -71,7 +71,8 @@ class LD34 {
 		this.loadProgress = 0;
 		this.assets = {};
 		this.bgbuffer = null;
-
+		this.lightMaskCanvas = util.createCanvas(drawCanv.width, drawCanv.height);
+		this.lightMaskCtx = this.lightMaskCanvas.getContext('2d');
 		// @@TODO: fix this before shipping!!!
 		this.loadAssets().then(() => { this.startLevel(TestLevel); });
 	}
@@ -292,11 +293,6 @@ class LD34 {
 			}
 			effects.length = j;
 		}
-		if (this.player.lastPos.distance(this.player.pos) >= 1) {
-			this.visTracker.setCenter(this.player.pos);
-			this.visTracker.sweep();
-		}
-
 		// this.visSegments = vishull2d(this.vishullInput, [this.player.x, this.player.y]);
 
 		this.camera.update(dt);
@@ -308,12 +304,30 @@ class LD34 {
 		let p2 = Vec2.temp(maxX+1, maxY+1);
 		let p3 = Vec2.temp(maxX+1, minY-1);
 
+		let ph = this.player.heading;
+		let hx = Math.cos(ph);
+		let hy = Math.sin(ph);
+		let ihx = -hx
+		let ihy = -hy;
+		let ih = Vec2.temp(ihx*3+this.player.pos.x, ihy*3+this.player.pos.y);
+		let minAngle = ph-Math.PI/5;
+		let maxAngle = ph+Math.PI/5;
+		let minAx = Math.cos(minAngle)*200 + ih.x;
+		let minAy = Math.sin(minAngle)*200 + ih.y;
+
+		let maxAx = Math.cos(maxAngle)*200 + ih.x;
+		let maxAy = Math.sin(maxAngle)*200 + ih.y;
+
 		// @TODO: avoid copying this so frequently
 		this.visTracker.setSegments(this.edgeGeom.concat([
 			new LineSegment(p0, p1, LineSegment.Flags.DoubleSided),
 			new LineSegment(p1, p2, LineSegment.Flags.DoubleSided),
 			new LineSegment(p2, p3, LineSegment.Flags.DoubleSided),
-			new LineSegment(p3, p0, LineSegment.Flags.DoubleSided)
+			new LineSegment(p3, p0, LineSegment.Flags.DoubleSided),
+
+			// new LineSegment(ih, Vec2.temp(minAx, minAy)),
+			// new LineSegment(ih, Vec2.temp(maxAx, maxAy)),
+
 		]));
 
 		this.visTracker.setCenter(this.player.pos);
@@ -506,15 +520,17 @@ class LD34 {
 
 	gameStateRender() {
 
-		for (let i = 0; i < this.layers.length; ++i) {
-			this.layers[i].clear();
-		}
-
 		let {minX, minY, maxX, maxY} = this.camera;
 		// minX = Math.floor(minX);
 		// minY = Math.floor(minY);
 		let iMinX = Math.round(minX);
 		let iMinY = Math.round(minY);
+
+		for (let i = 0; i < this.layers.length; ++i) {
+			this.layers[i].clear();
+			this.layers[i].context.save();
+			this.layers[i].context.translate(-iMinX, -iMinY);
+		}
 
 		this.debugContext.save();
 		this.debugContext.scale(Consts.Scale, Consts.Scale);
@@ -530,9 +546,9 @@ class LD34 {
 
 		this.bgLayer.fill('rgb(55, 55, 55)');
 		this.bgmodLayer.clear();
-		this.bgmodLayer.context.drawImage(this.bgbuffer.canvas, -minX, -minY);
-		this.bgmodLayer.blendMode = 'overlay';
-		this.bgmodLayer.alpha = 0.2;
+		// this.bgmodLayer.context.drawImage(this.bgbuffer.canvas, -minX, -minY);
+		// this.bgmodLayer.blendMode = 'overlay';
+		// this.bgmodLayer.alpha = 0.2;
 		{
 			console.time('render tiles');
 			let tileCtx = this.tileLayer.context;
@@ -550,8 +566,8 @@ class LD34 {
 
 					tileCtx.drawImage(this.assets.tiles,
 						tileX, tileY, 16, 16,
-						Math.round(tx * Consts.TileSize - minX),
-						Math.round(ty * Consts.TileSize - minY),
+						tx * Consts.TileSize,
+						ty * Consts.TileSize,
 						Consts.TileSize, Consts.TileSize);
 				}
 			}
@@ -562,7 +578,7 @@ class LD34 {
 		for (let ei = 0; ei < this.entities.length; ++ei) {
 			let ent = this.entities[ei];
 			if (ent.enabled) {
-				ent.render(minX, minY, this.entsLayer);
+				ent.render(0, 0, this.entsLayer);
 			}
 		}
 		// console.timeEnd('render entities');
@@ -571,59 +587,87 @@ class LD34 {
 		for (let ei = 0; ei < this.effects.length; ++ei) {
 			let fx = this.effects[ei];
 			if (fx.enabled) {
-				fx.render(minX, minY, this.fxLayer);
+				fx.render(0, 0, this.fxLayer);
 			}
 		}
 		// console.timeEnd('render effects');
 
 
-		if (this.visTracker.outXs.length)
-		{
+		if (this.visTracker.outXs.length) {
 			console.time('render lighting');
 			this.lightLayer.clear();
-			this.lightLayer.fill('black');
 
-			this.lightLayer.alpha = 1.0;
-			this.lightLayer.blendMode = 'multiply';
+			this.lightLayer.alpha = 0.3;
+			this.lightLayer.blendMode = 'overlay';
 			let lctx = this.lightLayer.context;
 			lctx.save();
-			lctx.translate(-iMinX, -iMinY);
 			lctx.beginPath();
-			/*
-			let lightPolygon = this.lightPolygon;
-			lctx.moveTo(lightPolygon[0].ex, lightPolygon[0].ey);
-			for (let i = 1, l = lightPolygon.length; i < l; ++i) {
-				lctx.lineTo(lightPolygon[i].ex, lightPolygon[i].ey);
-			}
-			lctx.lineTo(lightPolygon[0].ex, lightPolygon[0].ey);
-			*/
+			lctx.moveTo(this.player.pos.x, this.player.pos.y);
+
 			let {outXs, outYs} = this.visTracker;
 			lctx.moveTo(outXs[0], outYs[0]);
-			for (let i = 1, l = outXs.length; i < l; ++i) {
-				lctx.lineTo(outXs[i], outYs[i]);
-				drawing.drawArrow(this.debugContext, this.player.pos.x, this.player.pos.y, outXs[i], outYs[i]);
+			for (let i = 0, l = outXs.length; i < l; ++i) {
+				let px = outXs[i];
+				let py = outYs[i];
+				if (i === 0) lctx.moveTo(px, py);
+				else lctx.lineTo(px, py);
+				if (DEBUG) drawing.drawArrow(this.debugContext, this.player.pos.x, this.player.pos.y, px, py);
 			}
-			lctx.lineTo(outXs[0], outYs[0]);
-
+			const ShadowBlur = 10;
+			lctx.shadowColor = 'white';
+			lctx.shadowBlur = ShadowBlur/2;
+			lctx.shadowOffsetX = 0;
+			lctx.shadowOffsetY = 0;
 
 			lctx.closePath();
 			lctx.fillStyle = 'white';
 			lctx.fill();
+
+			let maskCtx = this.lightMaskCtx;
+			maskCtx.save();
+			maskCtx.clearRect(0, 0, maskCtx.canvas.width, maskCtx.canvas.height)
+			maskCtx.globalCompositeOperation = 'source-over';
+
+			maskCtx.shadowColor = 'black';
+			maskCtx.shadowBlur = ShadowBlur;
+			maskCtx.shadowOffsetX = 0;
+			maskCtx.shadowOffsetY = 0;
+			maskCtx.beginPath();
+			maskCtx.moveTo(this.player.pos.x-minX, this.player.pos.y-minY);
+			maskCtx.arc(
+				this.player.pos.x-minX,
+				this.player.pos.y-minY,
+				200,
+				this.player.heading-Math.PI/5,
+				this.player.heading+Math.PI/5);
+			maskCtx.closePath()
+			maskCtx.fill();
+			maskCtx.restore();
+
+			maskCtx.globalCompositeOperation = 'source-in';
+			maskCtx.drawImage(lctx.canvas, 0, 0);
 			lctx.restore();
+			lctx.translate(iMinX, iMinY);
+
+			lctx.clearRect(0, 0, lctx.canvas.width, lctx.canvas.height);
+			lctx.fillStyle = 'black';
+			lctx.fillRect(0, 0, lctx.canvas.width, lctx.canvas.height);
+			lctx.drawImage(maskCtx.canvas, 0, 0);
 
 			console.timeEnd('render lighting');
 		}
-		let DRAW_DEBUG_GEOM = false;
+		let DRAW_DEBUG_GEOM = DEBUG;
 
 		if (DRAW_DEBUG_GEOM) {
 			this.debugContext.strokeStyle = 'black';
 			this.edgeGeom.forEach(seg =>
 				seg.debugRender(this.debugContext));
 			this.debugContext.strokeStyle = 'yellow';
-			// this.lightPolygon.forEach(({sx, sy, ex, ey}) => {
-			// 	drawing.drawArrow(this.debugContext, this.player.pos.x, this.player.pos.y, ex, ey)
-			// })
 
+		}
+
+		for (let i = 0; i < this.layers.length; ++i) {
+			this.layers[i].context.restore();
 		}
 
 

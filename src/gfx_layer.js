@@ -3,12 +3,12 @@
 const PixelBuffer = require('./pixel_buffer');
 
 class Layer {
-	constructor(name, width, height, pbuf=null) {
+	constructor(name, width, height) {
 		this.name = name;
-		if (!pbuf) {
-			pbuf = new PixelBuffer(width, height);
-		}
-		this.buffer = pbuf;
+		// if (!pbuf) {
+			this.buffer = new PixelBuffer(width, height);
+		// }
+		// this.buffer = pbuf;
 		this.width = this.buffer.width;
 		this.height = this.buffer.height;
 		this.canvas = this.buffer.canvas;

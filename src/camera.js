@@ -26,8 +26,8 @@ class Camera {
 		this.shakeDrag = 0.2;
 		this.driftMul = new Vec2(0.1, 0.2);
 
-		this.lookahead = 1.2;
-		this.speed = 2;
+		this.lookahead = 1.1;
+		this.speed = 2.5;
 
 		this.minX = 0;
 		this.maxX = width;
@@ -105,8 +105,8 @@ class Camera {
 			fy = cy;
 		}
 
-		let fvx = this.focus.vel.x * 0;
-		let fvy = this.focus.vel.y * 0;
+		let fvx = this.focus.vel.x*0.1;
+		let fvy = this.focus.vel.y*0.1;
 
 		let gx = fx + fvx * this.lookahead;
 		let gy = fy + fvy * this.lookahead;

@@ -15,7 +15,7 @@ class GameRunner {
 		this.screen.style.width = Consts.ClientScreenWidth+"px";
 		this.screen.style.height = Consts.ClientScreenHeight+"px";
 		this.screenCtx = screen.getContext('2d');
-		
+
 		this.debugElem = document.getElementById('debug');
 
 		this.debugCanvas = createCanvas(Consts.ClientScreenWidth, Consts.ClientScreenHeight);
@@ -28,7 +28,7 @@ class GameRunner {
 		window.addEventListener('keydown', (e) => {
 			if (e.which === 27) {
 				this.paused = !this.paused;
-				if (!this.paused) 
+				if (!this.paused)
 					this.start();
 			}
 		})
@@ -69,7 +69,7 @@ class GameRunner {
 		requestAnimationFrame(this.doUpdate);
 		Clock.realTime = timestamp / 1000.0;
 		let unscaledDeltaTime = 1.0 / Clock.fps;
-		
+
 		let dt = unscaledDeltaTime * Clock.timeScale;
 		Clock.realDeltaTime = (timestamp - this.lastUpdate) / 1000.0;
 		Clock.deltaTime = dt;
@@ -119,6 +119,11 @@ class GameRunner {
 		screenCtx.globalCompositeOperation = 'source-over';
 		screenCtx.globalAlpha = 1.0;
 		if (this.game.layers) {
+			// let camMinX = 0, camMinY = 0;
+			// if (this.game.needCameraAdjust) {
+			// 	camMinX = this.game.camera.minX;
+			// 	camMinY = this.game.camera.minY;
+			// }
 			let gco = 'source-over';
 			let globalAlpha = 1.0;
 			for (let i = 0; i < this.game.layers.length; ++i) {
@@ -129,18 +134,18 @@ class GameRunner {
 				if (globalAlpha && globalAlpha !== alpha) {
 					globalAlpha = screenCtx.globalAlpha = alpha;
 				}
-				screenCtx.drawImage(canvas, 
-					0, 0, canvas.width, canvas.height, 
+				screenCtx.drawImage(canvas,
+					0, 0, canvas.width, canvas.height,
 					0, 0, screen.width, screen.height);
 			}
 		}
 		else {
-			screenCtx.drawImage(this.drawCanvas, 
-				0, 0, this.drawCanvas.width, this.drawCanvas.height, 
+			screenCtx.drawImage(this.drawCanvas,
+				0, 0, this.drawCanvas.width, this.drawCanvas.height,
 				0, 0, screen.width, screen.height);
 		}
-		screenCtx.drawImage(this.debugCanvas, 
-			0, 0, this.debugCanvas.width, this.debugCanvas.height, 
+		screenCtx.drawImage(this.debugCanvas,
+			0, 0, this.debugCanvas.width, this.debugCanvas.height,
 			0, 0, screen.width, screen.height);
 	}
 }
