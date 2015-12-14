@@ -21,6 +21,42 @@ const {perlinNoise, octaveNoise, UIRand} = require('./rand');
 
 const STATES = { Loading: 0, Menu: 1, Game: 2 };
 
+function loadLevel(tmx) {
+	let mapElem = tmx.querySelector('map');
+	let result = {
+		width: mapElem.getAttribute('width'),
+		height: mapElem.getAttribute('height'),
+	};
+	[].forEach.call(mapElem.querySelectorAll('properties property'), function(elem) {
+		let val = elem.getAttribute('value');
+		if (!isNaN(val)) {
+			let fval = Number(val);
+			if (+fval === fval) val = fval;
+		}
+		result[elem.getAttribute('name')] = val;
+	});
+
+	[].forEach.call(mapElem.querySelectorAll('layer'), function(layer) {
+		if (result.data != null) return; // TODO
+		let data = layer.querySelector('data');
+		if (data == null) {
+			console.warn("Layer without data...", layer, tmx);
+			return;
+		}
+		if (data.getAttribute('encoding') && data.getAttribute('encoding').toLowerCase() !== 'csv') {
+			console.error("Illegal tilemap type");
+		}
+		// try anyway
+		let text = data.textContent.trim();
+		let tileIds = text.split(/[\s,]+/g).filter(v => v.length !== 0).map(v => v|0);
+		if (tileIds.length != result.width*result.height) {
+			console.error("Not sure what to do about this, wrong size tile map...", tileIds, tmx);
+			throw Error("Bad tile map");
+		}
+		result.tiles = tileIds
+	});
+	return result;
+}
 
 const segmentTmp = [];
 class LD34 {
@@ -33,6 +69,7 @@ class LD34 {
 		this.screen = drawCanv;
 		this.ctx = drawCanv.getContext('2d');
 		this.tweenGroup = new TweenGroup();
+		this.loadingFailed = false;
 
 		this.bgLayer = new Layer('bg', drawCanv.width, drawCanv.height);
 		this.bgmodLayer = new Layer('bgmod', drawCanv.width, drawCanv.height);
@@ -44,10 +81,10 @@ class LD34 {
 		this.overlayLayer = new Layer('overlay', drawCanv.width, drawCanv.height);
 
 		this.layers = [
-			// this.bgLayer,
+			this.bgLayer,
 			//this.bgmodLayer,
-			// this.bgmodLayer,
 			this.entsLayer,
+			this.bgmodLayer,
 			// this.fxLayer,
 			this.lightLayer,
 			this.tileLayer,
@@ -70,28 +107,47 @@ class LD34 {
 		this.state = STATES.Loading;
 		this.loadProgress = 0;
 		this.assets = {};
+		this.seenBuffer = null;
 		this.bgbuffer = null;
 		this.lightMaskCanvas = util.createCanvas(drawCanv.width, drawCanv.height);
 		this.lightMaskCtx = this.lightMaskCanvas.getContext('2d');
 		// @@TODO: fix this before shipping!!!
-		this.loadAssets().then(() => { this.startLevel(TestLevel); });
+		this.loadAssets().then(() => { this.startLevel(this.assets.level0); });
 	}
 
 	loadAssets() {
 		let items = [
-			{path: 'res/player.png', name: 'player'},
-			{path: 'res/sprites.png', name: 'tiles'}
+			{path: 'res/player.png', name: 'player', type: 'image'},
+			{path: 'res/sprites.png', name: 'tiles', type: 'image'},
+			{path: 'res/lvl0.tmx', name: 'level0', type: 'level'},
 		];
 		let loaded = 0;
-		return Promise.all(items.map(({path, name}) => {
-			return util.loadImage(path).then(r => {
+		return Promise.all(items.map(({path, name, type}) => {
+			let p = null;
+			switch (type) {
+			case 'image':
+				p = util.loadImage(path);
+				break;
+			case 'level':
+				p = util.loadXML(path).then(doc => loadLevel(doc));
+				break;
+			default:
+				console.error("Not sure how to load ", type, name, path);
+				debugger;
+			}
+			return p.then(stuff => {
+				this.assets[name] = stuff;
 				this.loadProgress = ((++loaded)/items.length)*0.8;
-				this.assets[name] = r;
-				return r;
+				return stuff;
 			});
 		})).then(() => {
+			console.time("getRotatedTiles");
 			this.assets.playerRotations = PixelBuffer.getRotatedTiles(this.assets.player, 16);
+			console.timeEnd('getRotatedTiles');
 			this.loadProgress = 0.91;
+		}).catch(e => {
+			console.error(e);
+			this.loadingFailed = true;
 		});
 	}
 
@@ -102,7 +158,7 @@ class LD34 {
 		this.height = level.height*Consts.TileSize;
 		this.grid = new CollisionGrid(this.width, this.height, Consts.TileSize*2); // hm...
 		// this.player.reset();
-		this.addEntity(this.player, level.spawnX*Consts.TileSize, level.spawnY*Consts.TileSize)
+		this.addEntity(this.player, level.spawnX*Consts.TileSize+1.1, level.spawnY*Consts.TileSize+1.1)
 		this.camera.setPosition(this.player.pos.x, this.player.pos.y, true);
 		this.tileWidth = level.width;
 		this.tileHeight = level.height;
@@ -153,8 +209,11 @@ class LD34 {
 		// let ptXYA = new Float32Array(count*3);
 		// let tmpPoint = new Uint8Array(count)
 		this.visTracker.setSegments(this.edgeGeom);
-
 		this.bgbuffer = new PixelBuffer(this.width, this.height);
+		this.seenBuffer = new PixelBuffer(this.width, this.height);
+		this.seenBuffer.context.fillStyle = 'black'
+		this.seenBuffer.context.fillRect(0, 0, this.width, this.height);
+
 		/*
 		for (let y = 0; y < this.bgbuffer.height; ++y) {
 			for (let x = 0; x < this.bgbuffer.width; ++x) {
@@ -508,7 +567,7 @@ class LD34 {
 			progressBarHeight
 		);
 
-		this.hudLayer.context.fillStyle = 'white';
+		this.hudLayer.context.fillStyle = this.loadingFailed ? 'red': 'white';
 
 		this.hudLayer.context.fillRect(
 			(this.hudLayer.width - progressBarWidth)/2,
@@ -544,8 +603,6 @@ class LD34 {
 		let maxTileX = math.clamp(Math.ceil(maxX/Consts.TileSize), 0, this.tileWidth-1);
 		let maxTileY = math.clamp(Math.ceil(maxY/Consts.TileSize), 0, this.tileHeight-1);
 
-		this.bgLayer.fill('rgb(55, 55, 55)');
-		this.bgmodLayer.clear();
 		// this.bgmodLayer.context.drawImage(this.bgbuffer.canvas, -minX, -minY);
 		// this.bgmodLayer.blendMode = 'overlay';
 		// this.bgmodLayer.alpha = 0.2;
@@ -597,9 +654,10 @@ class LD34 {
 			console.time('render lighting');
 			this.lightLayer.clear();
 
-			this.lightLayer.alpha = 0.3;
+			this.lightLayer.alpha = 0.1;
 			this.lightLayer.blendMode = 'overlay';
 			let lctx = this.lightLayer.context;
+			// let sctx = this.seenBuffer.context;
 			lctx.save();
 			lctx.beginPath();
 			lctx.moveTo(this.player.pos.x, this.player.pos.y);
@@ -609,8 +667,8 @@ class LD34 {
 			for (let i = 0, l = outXs.length; i < l; ++i) {
 				let px = outXs[i];
 				let py = outYs[i];
-				if (i === 0) lctx.moveTo(px, py);
-				else lctx.lineTo(px, py);
+				if (i === 0) { lctx.moveTo(px, py); /*sctx.moveTo(px, py);*/ }
+				else { lctx.lineTo(px, py); /*sctx.lineTo(px, py);*/ }
 				if (DEBUG) drawing.drawArrow(this.debugContext, this.player.pos.x, this.player.pos.y, px, py);
 			}
 			const ShadowBlur = 10;
@@ -620,8 +678,11 @@ class LD34 {
 			lctx.shadowOffsetY = 0;
 
 			lctx.closePath();
+			// sctx.closePath();
 			lctx.fillStyle = 'white';
+			// sctx.fillStyle = 'white';
 			lctx.fill();
+			// sctx.fill();
 
 			let maskCtx = this.lightMaskCtx;
 			maskCtx.save();
@@ -653,13 +714,23 @@ class LD34 {
 			lctx.fillStyle = 'black';
 			lctx.fillRect(0, 0, lctx.canvas.width, lctx.canvas.height);
 			lctx.drawImage(maskCtx.canvas, 0, 0);
-
+			// this.seenBuffer.context.drawImage(maskCtx.canvas, iMinX, iMinY);
 			console.timeEnd('render lighting');
 		}
-		let DRAW_DEBUG_GEOM = DEBUG;
+
+		// this.bgLayer.fill('rgb(55, 55, 55)');
+		// this.bgmodLayer.clear();
+		// this.bgmodLayer.context.drawImage(this.seenBuffer.canvas, 0, 0);
+		//,
+		//	0, 0, this.bgmodLayer.width, this.bgmodLayer.height,
+		//	-iMinX, -iMinY, this.bgmodLayer.width, this.bgmodLayer.height);
+		// this.bgmodLayer.blendMode = 'multiply';
+		// this.bgmodLayer.alpha = 0.3
+
+		let DRAW_DEBUG_GEOM = false;
 
 		if (DRAW_DEBUG_GEOM) {
-			this.debugContext.strokeStyle = 'black';
+			this.debugContext.strokeStyle = 'yellow';
 			this.edgeGeom.forEach(seg =>
 				seg.debugRender(this.debugContext));
 			this.debugContext.strokeStyle = 'yellow';

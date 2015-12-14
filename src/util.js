@@ -29,5 +29,49 @@ function loadImage(src) {
 	});
 }
 
+exports.getRequest = getRequest;
+function getRequest(src, preRequest=null) {
+	return new Promise(function(resolve, reject) {
+		var xhr = new XMLHttpRequest();
+		xhr.open('GET', src, true);
+		if (preRequest) preRequest(xhr);
+		xhr.onload = function() {
+			if (xhr.status >= 200 && xhr.status < 400) {
+				resolve(xhr);
+			}
+			else {
+				console.error("request failed");
+				reject(xhr);
+			}
+		};
+		xhr.onerror = function(e) {
+			console.error(e, xhr);
+			reject(xhr);
+		};
+		xhr.send();
+	});
+}
 
+exports.loadXML = loadXML;
+function loadXML(src) {
+	return getRequest(src)
+	.then(function(response) {
+		return new DOMParser().parseFromString(response.responseText, "application/xml");
+	});
+}
 
+exports.loadText = loadText;
+function loadText(src) {
+	return getRequest(src)
+	.then(function(response) {
+		return response.responseText;
+	});
+}
+
+exports.loadJSON = loadJSON;
+function loadJSON(src) {
+	return getRequest(src)
+	.then(function(response) {
+		return JSON.parse(response.responseText)
+	});
+}
