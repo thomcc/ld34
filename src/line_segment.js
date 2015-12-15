@@ -11,6 +11,15 @@ class LineSegment {
 		this.flags = flags|0;
 	}
 
+	normal() {
+		// @HACK: seg is broken.
+		let idx = this.start.x - this.end.x;
+		let idy = this.start.y - this.end.y;
+		let px = -idy, py = idx;
+		let il = 1.0/(Math.sqrt(px*px+py*py)+1e-37)
+		return Vec2.temp(px*il, py*il);
+	}
+
 	closestPoint(out, {x, y}) {
 		const segX = this.end.x - this.start.x;
 		const segY = this.end.y - this.start.y;

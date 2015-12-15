@@ -73,19 +73,20 @@ class GameRunner {
 		let dt = unscaledDeltaTime * Clock.timeScale;
 		Clock.realDeltaTime = (timestamp - this.lastUpdate) / 1000.0;
 		Clock.deltaTime = dt;
+		this.lastUpdate = timestamp;
 
 		this.accum += Clock.realDeltaTime;
 		if (this.accum >= 5*unscaledDeltaTime) {
 			this.accum = unscaledDeltaTime;
 		}
 		let frameStart = Clock.now();
-		while (this.accum >= unscaledDeltaTime) {
+		while (this.accum >= dt) {
 			++this.ticks;
 			Vec2.Pool.reset();
 			this.game.update(dt);
 			Clock.accumTime += dt;
 			Input.update();
-			this.accum -= unscaledDeltaTime;
+			this.accum -= dt;
 			++Clock.ticks;
 		}
 		++this.frames;

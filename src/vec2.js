@@ -13,6 +13,7 @@ class Vec2 {
 	lenSq() { return this.x*this.x+this.y*this.y; }
 	len() { return Math.sqrt(this.x*this.x + this.y*this.y); }
 	length() { return this.len(); }
+	lengthSquared() { return lenSq(); }
 	scaled(n) { return new Vec2(this.x*n, this.y*n); }
 	normalize() { this.normalizeGetLen(); return this; }
 	clone() { return new Vec2(this.x, this.y); }
@@ -57,6 +58,20 @@ class Vec2 {
 
 	xFlip(about=0.0) { this.x = 2.0 * about - this.x; return this; }
 	yFlip(about=0.0) { this.y = 2.0 * about - this.y; return this; }
+
+	rotate(angle, about) {
+		let aboutX = 0.0, aboutY = 0.0;
+		if (about) { aboutX = about.x; aboutY = about.y; }
+		let x = this.x - aboutX;
+		let y = this.y - aboutY;
+		let c = Math.cos(angle);
+		let s = Math.sin(angle);
+		let nx = x * c - y * s;
+		let ny = x * s + y * c;
+		this.x = nx + aboutX;
+		this.y = ny + aboutY;
+		return this;
+	}
 
 	rotate90(about) {
 		let aboutX = 0.0, aboutY = 0.0;

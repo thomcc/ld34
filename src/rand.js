@@ -10,7 +10,7 @@ const RandUtils = {
 	upTo(a) { return this.integer(a); },
 	upToI(a) { return this.upTo(a+1); }, // inclusive
 	upToF(a) { return this.number() * a; },
-	
+
 	betweenF(min, max) { return min + this.number() * (max-min); },
 	betweenI(min, max) { return min + this.upTo(max-min+1); },
 	betweenX(min, max) { return min + this.upTo(max-min); },
@@ -19,6 +19,8 @@ const RandUtils = {
 	oneChanceIn(n) { return this.upTo(n) === 0; },
 	coinflip() { return this.oneChanceIn(2); },
 	probability(n) { return this.number() < n; },
+
+	xChanceInY(x, y) { return this.upTo(y) < x; },
 
 	choose(arr) {
 		if (arr.length === 0) {
@@ -41,7 +43,7 @@ const RandUtils = {
 		}
 		return result;
 	},
-	
+
 	bestRoll(max, rolls) {
 		let best = 0;
 		for (let i = 0; i < rolls; ++i) {
@@ -49,7 +51,7 @@ const RandUtils = {
 		}
 		return best;
 	},
-	
+
 	gaussian01() {
 		let u = 0.0, v = 0.0, r = 0.0;
 		do {
@@ -68,7 +70,7 @@ const RandUtils = {
 	uniform(mean=0.0, halfRange=1.0) {
 		return this.number() * (halfRange*2.0) + (mean - 1.0);
 	},
-	
+
 	chooseIndexWeighted(weights) {
 		let l = weights.length;
 		if (l === 0) {
@@ -105,22 +107,37 @@ const RandUtils = {
 		console.error("fell through choice loop", arr);
 		return this.upTo(arr.length);
 	},
-	
+
 	shuffle(arr) {
 		for (let i = arr.length-1; i > 0; --i) {
 			let r = this.upToI(i);
 			let tmp = arr[r]; arr[r] = arr[i]; arr[i] = tmp;
 		}
 		return arr;
+	},
+
+	colorBetween(c0, c1) {
+		let a0 = c0 >>> 24;
+		let b0 = (c0 >>> 16)&0xff;
+		let g0 = (c0 >>> 8)&0xff;
+		let r0 = c0 & 0xff;
+
+		let a1 = c1 >>> 24;
+		let b1 = (c1 >>> 16)&0xff;
+		let g1 = (c1 >>> 8)&0xff;
+		let r1 = c1 & 0xff;
+
+		return ((RNG.betweenI(a0, a1) << 24) |
+		        (RNG.betweenI(b0, b1) << 16) |
+		        (RNG.betweenI(g0, g1) << 8) |
+		        (RNG.betweenI(r0, r1)));
 	}
 }
 
 Object.assign(PCGRandom.prototype, RandUtils);
 
-const Rand = new PCGRandom();
-const UIRand = new PCGRandom();
-exports.Rand = Rand;
-exports.UIRand = UIRand;
+const RNG = new PCGRandom();
+exports.RNG = RNG;
 exports.RNGType = PCGRandom;
 
 const perlinNoise = quickNoise.noise;

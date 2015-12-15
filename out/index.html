@@ -55,18 +55,27 @@
 				text-align: left;
 				height: 20px;
 			}
+			.info {
+				width: 80%;
+				margin: auto;
+			}
 		</style>
 	</head>
 	<body>
-		<h1></h1>
+		<h1>fight or flight</h1>
 		<div class="game">
 			<canvas id="screen"></canvas>
 		</div>
-		<div id="debug">
+		<div class="info">
+			<p>how to play: click to guide the player. hold space to aim. when aiming, clicking shoots a bullet. you are in some sort of a base or space ship and need to find a bunch of keys. there are people who want to stop you from doing this with bullets.</p>
+			<p>this game was made from scratch by thom chiovoloni in 72 hours as part of <a href="http://www.ludumdare.com/compo/">ludum dare 34</a>. the theme was "two button controls". the two buttons were the mouse button and the space bar. please play using a recent version of firefox or chrome.</p>
+		</div>
+
+		<!--<div id="debug">
 			<span class="debug-item" id="fps">fps: 60</span>
 			<span class="debug-item" id="tps">tps: 60</span>
 			<span class="debug-item" id="mspf">ms/f: 0.0160</span>
-		</div>
+		</div> -->
 		<script src="//cdnjs.cloudflare.com/ajax/libs/es5-shim/4.1.10/es5-shim.js"></script>
 		<script src="//cdnjs.cloudflare.com/ajax/libs/es6-shim/0.33.1/es6-shim.js"></script>
 		<script src="//cdnjs.cloudflare.com/ajax/libs/howler/2.0.0-beta5/howler.min.js"></script>

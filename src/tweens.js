@@ -1,6 +1,6 @@
 'use strict';
 const {cos, sin, PI, pow, sqrt} = Math;
-const {UIRand} = require('./rand');
+const {RNG} = require('./rand');
 const Promise = require('bluebird');
 
 const HALF_PI = PI * 0.5;
@@ -15,7 +15,7 @@ exports.EaseType = { In: EaseTypeIn, Out: EaseTypeOut, InOut: EaseTypeInOut, Sha
 
 function bounceReverse(t) {
 	if (t < 1.0 / 2.75) return 7.5625*t*t;
-	else if (t < 2.0/2.75) { t -= 1.50/2.75; return 7.5625*t*t + 0.75; } 
+	else if (t < 2.0/2.75) { t -= 1.50/2.75; return 7.5625*t*t + 0.75; }
 	else if (t < 2.5/2.75) { t -= 2.25/2.75; return 7.5625*t*t + 0.9375; }
 	else { t -= 2.625/2.75; return 7.5625*t*t + 0.984375; }
 }
@@ -94,7 +94,7 @@ class Tween {
 			case EaseTypeIn: t = easing(progress); break;
 			case EaseTypeOut: t = 1.0 - easing(1.0 - progress); break;
 			case EaseTypeInOut: t = progress < 0.5 ? easing(progress) : (1.0 - easing(1.0 - progress)); break;
-			case EaseTypeShake: t = easing(progress) * UIRand.number(); break;
+			case EaseTypeShake: t = easing(progress) * RNG.number(); break;
 			default: console.error("illegal value for type: "+type); t = easing(progress); break;
 		}
 		let value = start * (1.0 - t) + end * t;

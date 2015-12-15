@@ -34,11 +34,11 @@ class PixelBuffer {
 		this.bounds.maxY = 0;
 	}
 
-	update() {
-		this.context.clearRect(0, 0, this.width, this.height);
+	update(clear=true) {
+		if (clear) this.context.clearRect(0, 0, this.width, this.height);
 		this.context.putImageData(this.imageData, 0, 0);
 	}
-	
+
 	putPixel(x, y, v) {
 		if ((x >>> 0) < this.width && (y >>> 0) < this.height) {
 			this.pixelsDirty = true;
@@ -51,11 +51,15 @@ class PixelBuffer {
 			}
 		}
 	}
+	getPixbuf() {
+		this.pixelsDirty = true;
+		return this;
+	}
 
 	inBounds(x, y) {
 		return (x >>> 0) < this.width && (y >>> 0) < this.height;
 	}
-	
+
 	getPixel(x, y) {
 		if ((x >>> 0) < this.width && (y >>> 0) < this.height) {
 			return this.pixels[x+y*this.width];
@@ -109,6 +113,25 @@ class PixelBuffer {
 			}
 			pixels[x0+y0*width] = color;
 		}
+	}
+
+	withReplacedColors(replacements) {
+		let pb = new PixelBuffer(this.width, this.height);
+		let pbpix = pb.pixels;
+		let ownPix = this.pixels;
+		for (let i = 0; i < ownPix.length; ++i) {
+			let pixel = ownPix[i] >>> 0;
+			pbpix[i] = pixel;
+			for (let r = 0; r < replacements.length; ++r) {
+				let search = replacements[r][0] >>> 0;
+				if (pixel === search) {
+					pbpix[i] = replacements[r][1] >>> 0
+					break;
+				}
+			}
+		}
+		pb.update();
+		return pb;
 	}
 }
 

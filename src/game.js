@@ -17,11 +17,27 @@ const util = require('./util');
 const drawing = require('./drawing');
 const {VisTracker} = require('./lighting');
 const Sounds = require('./audio');
-
-const {perlinNoise, octaveNoise, UIRand} = require('./rand');
+const Key = require('./key');
+const Enemy = require('./enemy');
+const {perlinNoise, octaveNoise, RNG} = require('./rand');
 
 const STATES = { Loading: 0, Menu: 1, Game: 2 };
 
+
+const EnemyLocations = [
+	[12, 1],
+	[19, 10],
+	[23, 7],
+	[27, 10],
+	[25, 14],
+	[10, 19], [11, 19], [12, 19], [13, 19],
+	[26, 20],
+	[24, 21],
+	[14, 27],
+	[4, 9],
+
+
+]
 
 function loadLevel(tmx) {
 	let mapElem = tmx.querySelector('map');
@@ -57,6 +73,9 @@ function loadLevel(tmx) {
 		}
 		result.tiles = tileIds
 	});
+
+
+
 	return result;
 }
 
@@ -66,7 +85,7 @@ class LD34 {
 		this.debugCanvas = dbgCanv;
 		this.debugContext = dbgCanv.getContext('2d');
 		this.entities = [];
-		this.effects = [];
+
 		this.paused = false;
 		this.screen = drawCanv;
 		this.ctx = drawCanv.getContext('2d');
@@ -83,13 +102,16 @@ class LD34 {
 		this.overlayLayer = new Layer('overlay', drawCanv.width, drawCanv.height);
 
 		this.startedGame = false;
+		this.playerDead = false;
+		this.deadPlayerTimer = 0.0;
 
 		this.layers = [
 			this.bgLayer,
 			//this.bgmodLayer,
-			this.entsLayer,
 			this.bgmodLayer,
-			// this.fxLayer,
+
+			this.fxLayer,
+			this.entsLayer,
 			this.lightLayer,
 			this.tileLayer,
 			this.hudLayer,
@@ -102,6 +124,8 @@ class LD34 {
 
 		this.grid = null;
 		this.visTracker = new VisTracker();
+		this.keys = [];
+		this.locks = [];
 
 		this.player = new Player(this);
 		this.camTarget = new Vec2(0.0, 0.0);
@@ -115,7 +139,9 @@ class LD34 {
 		this.bgbuffer = null;
 		this.lightMaskCanvas = util.createCanvas(drawCanv.width, drawCanv.height);
 		this.lightMaskCtx = this.lightMaskCanvas.getContext('2d');
-
+		this.emptyTiles = null;
+		this.bloodBuffer = null;
+		this.gameWon = false;
 		this.loadAssets();
 	}
 
@@ -123,7 +149,9 @@ class LD34 {
 		let items = [
 			{path: 'res/player.png', name: 'player', type: 'image'},
 			{path: 'res/sprites.png', name: 'tiles', type: 'image'},
-			{path: 'res/lvl0.tmx', name: 'level0', type: 'level'},
+			{path: 'res/lvl1.tmx', name: 'level0', type: 'level'},
+			{path: 'res/misc.png', name: 'misc', type: 'image'},
+			{path: 'res/dead.png', name: 'dead', type: 'image'}
 		];
 		let loaded = 0;
 		return Promise.all(items.map(({path, name, type}) => {
@@ -145,9 +173,20 @@ class LD34 {
 				return stuff;
 			});
 		})).then(() => {
-			if (window.TIME_FUNCTIONS) console.time("getRotatedTiles");
 			this.assets.playerRotations = PixelBuffer.getRotatedTiles(this.assets.player, 16);
-			if (window.TIME_FUNCTIONS) console.timeEnd('getRotatedTiles');
+			let hilight = this.assets.playerRotations.getPixel(4, 7);
+			let mid = this.assets.playerRotations.getPixel(8, 5);
+			let colors = [
+				[[hilight, 0xff1717b4], [mid, 0xff0f0f6e]],
+				[[hilight, 0xff00bacb], [mid, 0xff0099a7]],
+				[[hilight, 0xff00bacb], [mid, 0xff0099a7]],
+				[[hilight, 0xffcb0084], [mid, 0xffa7006c]],
+			];
+			this.assets.enemyRotations = colors.map((replacements) =>
+				this.assets.playerRotations.withReplacedColors(replacements));
+			let deadPlayer = PixelBuffer.fromImage(this.assets.dead);
+			this.assets.deadEnemies = colors.map((replacements) => deadPlayer.withReplacedColors(replacements));
+
 			this.setState(STATES.Game);
 		}).catch(e => {
 			console.error(e);
@@ -156,60 +195,130 @@ class LD34 {
 	}
 
 	startLevel(level) {
+		this.player = new Player(this);
+		this.camera = new Camera(this, this.player, this.camTarget, this.screen.width, this.screen.height);
+
 		this.startedGame = true;
 		this.entities.length = 0;
-		this.effects.length = 0;
+		this.playerDead = false;
+		this.deadPlayerTimer = 0.0;
+
 		this.width = level.width*Consts.TileSize;
 		this.height = level.height*Consts.TileSize;
-		this.grid = new CollisionGrid(this.width, this.height, Consts.TileSize*2); // hm...
+		this.grid = new CollisionGrid(this.width, this.height, Consts.TileSize*4); // hm...
+
 		// this.player.reset();
-		this.addEntity(this.player, level.spawnX*Consts.TileSize+1.1, level.spawnY*Consts.TileSize+1.1)
+		this.addEntity(this.player, level.spawnX*Consts.TileSize+8.1, level.spawnY*Consts.TileSize+8.1);
+		EnemyLocations.map(([x, y]) => {
+			x *= Consts.TileSize;
+			y *= Consts.TileSize;
+			this.addEntity(new Enemy(this, x+8, y+8));
+		});
+		// this.addEn tity(new Enemy(this, 2*16+8, 5*16+8));
 		this.camera.setPosition(this.player.pos.x, this.player.pos.y, true);
 		this.tileWidth = level.width;
 		this.tileHeight = level.height;
 		this.tiles = new Array(this.tileWidth*this.tileHeight);
-		let geom = [];
+		this.emptyTiles = new Uint8Array(this.tileWidth*this.tileHeight);
+		this.lockedTiles = new Array(this.tileWidth*this.tileHeight); // waste of memory...
+
+		let knownKeysOrLocks = {};
 		for (let y = 0; y < this.tileHeight; ++y) {
 			for (let x = 0; x < this.tileWidth; ++x) {
 				let i = x+y*this.tileWidth;
 				let tileId = level.tiles[i];
-				if (tileId >= Tiles.length) tileId = 0;
+				if (tileId >= Tiles.length) {
+					if (!(tileId in knownKeysOrLocks)) {
+						knownKeysOrLocks[tileId] = [];
+					}
+					knownKeysOrLocks[tileId].push({x, y});
+					tileId = 0;
+				}
 				let tileInfo = Tiles[tileId];
 				this.tiles[i] = tileId ? tileInfo.offsetBy(x*Consts.TileSize, y*Consts.TileSize) : tileInfo;
-				if (tileId) {
-					geom = polybool(geom, [this.tiles[i].edges.map(({start}) => [start.x, start.y])])
+				if (!tileId) {
+					this.emptyTiles[i] = 1;
 				}
 				this.tiles[i].id = tileId;
 			}
 		}
 
-		geom.forEach((poly) => {
-			for (let i = 1; i < poly.length; ++i) {
-				let [px, py] = poly[i-1];
-				let [cx, cy] = poly[i];
-				let [nx, ny] = poly[(i+1)%poly.length];
-				let dpx = cx-px, dpy = cy-py;
-				let dnx = nx-cx, dny = ny-cy;
-				let lp = Math.sqrt(dpx*dpx+dpy*dpy);
-				if (lp !== 0) { dpx /= lp; dpy /= lp; }
-				let ln = Math.sqrt(dnx*dnx+dny*dny);
-				if (ln !== 0) { dnx /= ln; dny /= ln; }
-				// same direction.
-				if (Math.abs(dnx*dpx + dny*dpy - 1) < 0.0001) {
-					poly.splice(i, 1);
-					--i;
+		let geom = level.geom;
+		if (this.edgeGeom.length === 0) {
+			level.geom = geom = [];
+			for (let y = 0; y < this.tileHeight; ++y) {
+				for (let x = 0; x < this.tileWidth; ++x) {
+					let i = x+y*this.tileWidth;
+					let tileId = level.tiles[i];
+					if (tileId >= Tiles.length) continue;
+					let tileInfo = Tiles[tileId];
+					if (tileId) {
+						geom = polybool(geom, [this.tiles[i].edges.map(({start}) => [start.x, start.y])])
+					}
 				}
 			}
+
+			geom.forEach((poly) => {
+				for (let i = 1; i < poly.length; ++i) {
+					let [px, py] = poly[i-1];
+					let [cx, cy] = poly[i];
+					let [nx, ny] = poly[(i+1)%poly.length];
+					let dpx = cx-px, dpy = cy-py;
+					let dnx = nx-cx, dny = ny-cy;
+					let lp = Math.sqrt(dpx*dpx+dpy*dpy);
+					if (lp !== 0) { dpx /= lp; dpy /= lp; }
+					let ln = Math.sqrt(dnx*dnx+dny*dny);
+					if (ln !== 0) { dnx /= ln; dny /= ln; }
+					// same direction.
+					if (Math.abs(dnx*dpx + dny*dpy - 1) < 0.0001) {
+						poly.splice(i, 1);
+						--i;
+					}
+				}
+			});
+
+			this.edgeGeom.length = 0;
+			geom.forEach((poly, i) => {
+				for (let i = 0; i < poly.length; ++i) {
+					let [px, py] = poly[i];
+					let [nx, ny] = poly[(i+1)%poly.length];
+					this.edgeGeom.push(new LineSegment(new Vec2(px, py), new Vec2(nx, ny)));
+				}
+			});
+
+		}
+
+
+		this.keys.length = 0;
+		this.locks.length = 0;
+		Object.keys(knownKeysOrLocks).forEach((id, idx) => {
+			let lk = knownKeysOrLocks[id];
+			let locks = [];
+			let key = {id: idx, pos: null, locks, locked: true};
+
+			lk.forEach(({x, y}) => {
+
+				let left = x !== 0 && (this.tiles[(x-1)+y*this.tileWidth].id === 1);
+				let right = x !== this.tileWidth-1 && (this.tiles[x+1+y*this.tileWidth].id === 1);
+				let top = y !== 0 && (this.tiles[(y-1)*this.tileWidth+x].id === 1);
+				let bottom = y !== this.tileHeight-1 && (this.tiles[x+(y+1)*this.tileWidth].id === 1);
+				if (left || right || top || bottom) {
+					let lock = {key, id: idx, pos: new Vec2(x, y), tile: Tiles[1].offsetBy(x*Consts.TileSize, y*Consts.TileSize)};
+					locks.push(lock);
+					this.lockedTiles[x+y*this.tileWidth] = lock;
+					this.locks.push(lock);
+				} else {
+					console.assert(key.pos == null);
+					key.pos = new Vec2(x, y);
+				}
+			});
+			console.assert(key.pos != null);
+			this.keys.push(key);
 		});
 
-		this.edgeGeom.length = 0;
-		geom.forEach((poly, i) => {
-			for (let i = 0; i < poly.length; ++i) {
-				let [px, py] = poly[i];
-				let [nx, ny] = poly[(i+1)%poly.length];
-				this.edgeGeom.push(new LineSegment(new Vec2(px, py), new Vec2(nx, ny)));
-			}
-		});
+		this.keys.forEach((k) =>
+			this.addEntity(new Key(this, k.pos.x*Consts.TileSize, k.pos.y*Consts.TileSize, k)))
+
 		// let count = Math.ceil((this.geomPoints.length+4)*1.5);
 		// let ptXYA = new Float32Array(count*3);
 		// let tmpPoint = new Uint8Array(count)
@@ -218,16 +327,18 @@ class LD34 {
 		// this.seenBuffer = new PixelBuffer(this.width, this.height);
 		// this.seenBuffer.context.fillStyle = 'black'
 		// this.seenBuffer.context.fillRect(0, 0, this.width, this.height);
+		this.bloodBuffer = new PixelBuffer(this.width, this.height);
 
 		Sounds.playMusic(1);
-
 	}
 
 	addEntity(ent, x=ent.pos.x, y=ent.pos.y) {
 		ent.pos.x = x;
 		ent.pos.y = y;
 		this.entities.push(ent);
-		this.grid.add(ent);
+		if (ent.collidesWithEntities || ent.collidesWithPlayer) {
+			this.grid.add(ent);
+		}
 		return ent;
 	}
 
@@ -240,7 +351,11 @@ class LD34 {
 		result.length = 0;
 		for (let y = top; y <= bottom; ++y) {
 			for (let x = left; x <= right; ++x) {
-				result.push.apply(result, this.tiles[y * this.tileWidth + x].edges);
+				let tileIdx = y * this.tileWidth + x;
+				result.push.apply(result, this.tiles[tileIdx].edges);
+				if (this.lockedTiles[tileIdx] && this.lockedTiles[tileIdx].key.locked) {
+					result.push.apply(result, this.lockedTiles[tileIdx].tile.edges);
+				}
 			}
 		}
 		return result;
@@ -252,6 +367,12 @@ class LD34 {
 		case STATES.Game:
 			if (!this.startedGame) {
 				this.startLevel(this.assets.level0);
+			}
+			else if (this.playerDead) {
+				this.deadPlayerTimer -= dt;
+				if (this.deadPlayerTimer<0) {
+					this.startLevel(this.assets.level0);
+				}
 			}
 			this.gameStateUpdate(dt);
 			break;
@@ -293,34 +414,26 @@ class LD34 {
 		else {
 			this.camTarget.copy(this.player.pos);
 		}
-
+		let extraGeom = [];
 
 		// if (window.TIME_FUNCTIONS) console.time('update:entities');
 		{
 			let entities = this.entities;
 			for (let i = 0; i < entities.length; ++i) {
 				entities[i].update(dt);
+				entities[i].postUpdate(dt);
 			}
 			let j = 0;
 			for (let i = 0, l = entities.length; i < l; ++i) {
-				if (entities[i].enabled) entities[j++] = entities[i];
+				if (entities[i].enabled) {
+					entities[j++] = entities[i];
+					let segs = entities[i].getSegments();
+					if (segs) extraGeom.push.apply(extraGeom, segs);
+				}
 			}
 			entities.length = j;
 		}
 		// if (window.TIME_FUNCTIONS) console.timeEnd('update:entities');
-		// if (window.TIME_FUNCTIONS) console.time('update:effects');
-		{
-			let effects = this.effects;
-			for (let i = 0; i < effects.length; ++i) {
-				effects[i].update(dt);
-			}
-			let j = 0;
-			for (let i = 0, l = effects.length; i < l; ++i) {
-				if (effects[i].enabled) effects[j++] = effects[i];
-			}
-			effects.length = j;
-		}
-		// this.visSegments = vishull2d(this.vishullInput, [this.player.x, this.player.y]);
 
 		this.camera.update(dt);
 		if (window.TIME_FUNCTIONS) console.time('lighting');
@@ -330,6 +443,8 @@ class LD34 {
 		let p1 = Vec2.temp(minX-1, maxY+1);
 		let p2 = Vec2.temp(maxX+1, maxY+1);
 		let p3 = Vec2.temp(maxX+1, minY-1);
+		extraGeom.push(new LineSegment(p0, p1), new LineSegment(p1, p2),
+		               new LineSegment(p2, p3), new LineSegment(p3, p0))
 
 		let ph = this.player.heading;
 		let hx = Math.cos(ph);
@@ -346,16 +461,7 @@ class LD34 {
 		let maxAy = Math.sin(maxAngle)*200 + ih.y;
 
 		// @TODO: avoid copying this so frequently
-		this.visTracker.setSegments(this.edgeGeom.concat([
-			new LineSegment(p0, p1, LineSegment.Flags.DoubleSided),
-			new LineSegment(p1, p2, LineSegment.Flags.DoubleSided),
-			new LineSegment(p2, p3, LineSegment.Flags.DoubleSided),
-			new LineSegment(p3, p0, LineSegment.Flags.DoubleSided),
-
-			// new LineSegment(ih, Vec2.temp(minAx, minAy)),
-			// new LineSegment(ih, Vec2.temp(maxAx, maxAy)),
-
-		]));
+		this.visTracker.setSegments(this.edgeGeom.concat(extraGeom, ...this.locks.filter(l => l.key.locked).map(l => l.tile.edges)));
 
 		this.visTracker.setCenter(this.player.pos);
 		this.visTracker.sweep();
@@ -393,7 +499,13 @@ class LD34 {
 	}
 
 	raycastCell(outP, outN, x, y, rayPos, rayDir) {
-		let segs = this.tiles[x + y*this.tileWidth].edges;
+		let tileIdx = x + y*this.tileWidth;
+		let segs = this.tiles[tileIdx].edges;
+		if (segs.length === 0) {
+			if (this.lockedTiles[tileIdx] && this.lockedTiles[tileIdx].key.locked) {
+				segs = this.lockedTiles[tileIdx].tile.edges;
+			}
+		}
 		let curBest = 2.0;
 		let tmpP = Vec2.temp(0.0, 0.0);
 		let tmpN = Vec2.temp(0.0, 0.0);
@@ -413,6 +525,17 @@ class LD34 {
 	setState(state) {
 		this.lastState = this.state;
 		this.state = state;
+	}
+
+	canSee(pt0, pt1) {
+		let p = Vec2.temp();
+		let n = Vec2.temp();
+		let delta = pt0.to(pt1);
+		let r = this.raycast(p, n, pt0, delta.normalized());
+		if (r < 0 || r < delta.length()) {
+			return false;
+		}
+		return true;
 	}
 
 	raycast(outP, outN, rayPos, rayDir, rayLen, extraSegs) {
@@ -551,6 +674,24 @@ class LD34 {
 		);
 	}
 
+	unlock(key) {
+		key.locked = false;
+		key.locks.forEach(l => {
+			l.locked = false;
+		});
+
+		if (!this.keys.some(k => k.locked)) {
+			this.gameWon = true;
+			alert("You win (this message is all I had time for, sorry)");
+		}
+
+	}
+
+	killPlayer() {
+		this.deadPlayerTimer = 1.0;
+		this.playerDead = true;
+	}
+
 	gameStateRender() {
 
 		let {minX, minY, maxX, maxY} = this.camera;
@@ -560,6 +701,8 @@ class LD34 {
 		let iMinY = Math.round(minY);
 
 		for (let i = 0; i < this.layers.length; ++i) {
+			let pb = this.layers[i].buffer;
+			if (pb.pixelsDirty) pb.reset();
 			this.layers[i].clear();
 			this.layers[i].context.save();
 			this.layers[i].context.translate(-iMinX, -iMinY);
@@ -588,7 +731,17 @@ class LD34 {
 				let row = ty*this.tileWidth;
 				for (let tx = minTileX; tx <= maxTileX; ++tx) {
 					let tile = this.tiles[tx + row];
-					if (tile.id === 0) continue;
+					if (tile.id === 0) {
+						let lock = this.lockedTiles[tx+row];
+						if (lock && lock.key.locked) {
+							this.entsLayer.context.drawImage(this.assets.misc,
+								0, lock.id*16, 16, 16,
+								tx * Consts.TileSize,
+								ty * Consts.TileSize,
+								Consts.TileSize, Consts.TileSize);
+						}
+						continue;
+					}
 					let tileId = tile.id-1;
 					var tileX = tileId % 16
 					var tileY = (tileId / 16)|0;
@@ -606,30 +759,22 @@ class LD34 {
 		}
 
 		// if (window.TIME_FUNCTIONS) console.time('render entities');
-		for (let ei = 0; ei < this.entities.length; ++ei) {
+		for (let ei = 1; ei < this.entities.length; ++ei) {
 			let ent = this.entities[ei];
 			if (ent.enabled) {
-				ent.render(0, 0, this.entsLayer);
+				ent.render(this.entsLayer, this.fxLayer.buffer, minX, minY);
 			}
 		}
+		this.entities[0].render(this.entsLayer, this.fxLayer.buffer, minX, minY); // player
 		// if (window.TIME_FUNCTIONS) console.timeEnd('render entities');
-
-		// if (window.TIME_FUNCTIONS) console.time('render effects');
-		for (let ei = 0; ei < this.effects.length; ++ei) {
-			let fx = this.effects[ei];
-			if (fx.enabled) {
-				fx.render(0, 0, this.fxLayer);
-			}
-		}
-		// if (window.TIME_FUNCTIONS) console.timeEnd('render effects');
 
 
 		if (this.visTracker.outXs.length) {
 			if (window.TIME_FUNCTIONS) console.time('render lighting');
 			this.lightLayer.clear();
 
-			this.lightLayer.alpha = 0.1;
-			this.lightLayer.blendMode = 'overlay';
+			this.lightLayer.alpha = 0.5;
+			this.lightLayer.blendMode = 'multiply';
 			let lctx = this.lightLayer.context;
 			// let sctx = this.seenBuffer.context;
 			lctx.save();
@@ -708,13 +853,18 @@ class LD34 {
 			this.edgeGeom.forEach(seg =>
 				seg.debugRender(this.debugContext));
 			this.debugContext.strokeStyle = 'yellow';
-
 		}
 
 		for (let i = 0; i < this.layers.length; ++i) {
 			this.layers[i].context.restore();
+			if (this.layers[i].buffer.pixelsDirty)
+				this.layers[i].buffer.update(false);
 		}
 
+		this.bloodBuffer.update(true);
+		this.bgmodLayer.context.drawImage(this.bloodBuffer.canvas,
+			iMinX, iMinY, this.bgmodLayer.width, this.bgmodLayer.height,
+			0, 0, this.bgmodLayer.width, this.bgmodLayer.height)
 
 		this.debugContext.restore();
 	}

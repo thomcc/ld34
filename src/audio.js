@@ -1,5 +1,5 @@
 'use strict';
-let {UIRand} = require('./rand');
+let {RNG} = require('./rand');
 
 function soundVariations(src, min=0.8, max=1.5, count=10) {
 	let res = [
@@ -12,10 +12,14 @@ function soundVariations(src, min=0.8, max=1.5, count=10) {
 let Sounds = {
 	currentSong: null,
 	boom: soundVariations(['res/boom1.wav']),
-	bang: soundVariations(['res/bang2.mp3'], 0.8, 0.95, count=5),
+	bang: soundVariations(['res/bang2.mp3'], 1, 1.1, 5),
 	ouch: soundVariations(['res/big-ouch.mp3']),
 	monstOuch: soundVariations(['res/monst-ouch.mp3']),
 	growl: soundVariations(['res/growl.mp3'], 1.0, 2.0),
+	unlock: soundVariations(['res/unlock.wav']),
+	die: soundVariations(['res/die.mp3'], 0.9, 1.0),
+	stop: [new Howl({ src: ['res/stop.mp3'], volume: 0.2 })],
+	wait: [new Howl({ src: ['res/wait.mp3'], volume: 0.2 })],
 
 	bangs: [
 		new Howl({ src: ['res/bang1.wav'], rate: 1 }),
@@ -84,7 +88,7 @@ let Sounds = {
 	playEffect(name) {
 		if (name === 'wobble') this.playWobble();
 		else if (name in this) {
-			UIRand.choose(this[name]).play();
+			RNG.choose(this[name]).play();
 		}
 		else {
 			console.warn('cnat play '+name);
@@ -93,12 +97,14 @@ let Sounds = {
 
 	playWobble(which=-1) {
 		if (which < 0) {
-			which = UIRand.upTo(6);
+			which = RNG.upTo(6);
 		}
-		this.wobbles.play('wobble'+which);
+		this.wobbles.play('wobble'+(which%5));
 	}
 
 }
+
+Sounds.play = Sounds.playEffect;
 
 window.Sounds = Sounds;
 

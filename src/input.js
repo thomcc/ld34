@@ -33,19 +33,22 @@ function initMouse(screen) {
 		Mouse.lastX = Mouse.dx = Mouse.x = Mouse.lastY = Mouse.dy = Mouse.y = 0;
 		Mouse.transitions = 0;
 	});
-	
+
 	window.addEventListener('mousedown', function(e) {
 		if (e.button === 0) { Mouse.isDown = true; ++Mouse.transitions; }
 		updateMousePos(e.clientX, e.clientY);
+		e.preventDefault();
 	});
-	
+
 	window.addEventListener('mouseup', function(e) {
 		if (e.button === 0) { Mouse.isDown = false; ++Mouse.transitions; }
 		updateMousePos(e.clientX, e.clientY);
+		e.preventDefault();
 	});
-	
+
 	window.addEventListener('mousemove', function(e) {
 		updateMousePos(e.clientX, e.clientY);
+		e.preventDefault();
 	});
 }
 
@@ -150,7 +153,7 @@ function initKeyboard() {
 		if (!Keyboard.keysDown[kc]) { Keyboard.keysDown[kc] = 1; ++Keyboard.keyTransitions[kc]; }
 		if (Keyboard.defaultPrevented[kc]) { e.preventDefault(); }
 	});
-	
+
 	window.addEventListener('keyup', function(e) {
 		var kc = e.keyCode >>> 0;
 		if (kc > KEYMAX || kc === 0) { console.warn("Unknown keycode value from DOM event.", e); return; }

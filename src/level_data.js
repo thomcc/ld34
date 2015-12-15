@@ -50,8 +50,8 @@ function polyTile2S(...pts) {
 	return [
 		polygon(...pts),
 		polygon(...pts.map(pt => pt.rotated90(TILE_MID))),
-		polygon(...pts.map(pt => pt.xFlipped(0.5))),
-		polygon(...pts.map(pt => pt.xFlipped(0.5).rotated90(TILE_MID))),
+		polygon(...pts.map(pt => pt.xFlipped(0.5)).reverse()),
+		polygon(...pts.map(pt => pt.xFlipped(0.5).rotated90(TILE_MID)).reverse()),
 	];
 }
 function polyTile2(...pts) {
@@ -85,14 +85,14 @@ const Tiles = [].concat(
 
 	polyTile(v(0, H), v(1, H), v(1, 0)),
 	polyTile(v(0, 0), v(0, H), v(1, H)),
-	polyTile(v(0, 0), v(H, 0), v(0, H)),
+	polyTile(v(0, 0), v(0, H), v(H, 0)),
 	polyTile(v(0, 0), v(0, H), v(H, H), v(H, 0)),
 
 	polyTile2S(v(0, 0), v(H, 1), v(1, 1), v(H, 0)),
 
 	polyTile2(v(0, 0), v(0, H), v(H, 1), v(1, 1), v(1, H), v(H, 0)),
-	polyTile(v(0, 0), v(0, 1), v(H, 1), v(H, H), v(1, H), v(1, 0))
-	// polyTile(v(0, 0), v(0, 1), v(H, 1), v(1, H), v(1, 0)),
+	polyTile(v(0, 0), v(0, 1), v(H, 1), v(H, H), v(1, H), v(1, 0)),
+	polyTile(v(0, 0), v(0, 1), v(H, 1), v(1, H), v(1, 0))
 	// polyTile2F(v(0, 0), v(0, 1), v(1, 1), v(H, H), v(H, 0))
 
 );
